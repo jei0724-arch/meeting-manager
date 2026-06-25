@@ -359,6 +359,13 @@ function buildQChips(){
 
 function assignSeat(name){
   if(!activeId) return;
+  // 이미 다른 자리에 배정된 사람이면 기존 자리 비우기
+  const prevKey = Object.keys(seatData).find(k => k !== activeId && seatData[k].name === name);
+  if(prevKey){
+    delete seatData[prevKey];
+    const prevEl = document.getElementById('hs-'+prevKey);
+    if(prevEl) renderOneSeat(prevEl, prevKey);
+  }
   seatData[activeId]={name,type:curType};
   saveLS('mg_seats',seatData);
   const el=document.getElementById('hs-'+activeId);
