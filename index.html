@@ -27,17 +27,17 @@
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
 
   /* ── Seating ── */
-  .hall { display:flex; gap:10px; align-items:flex-start; overflow-x:auto; padding-bottom:6px; justify-content:center; }
-  .hall-sec { display:flex; flex-direction:column; align-items:center; gap:2px; flex-shrink:0; }
+  .hall { display:flex; gap:8px; align-items:flex-start; overflow-x:auto; padding:4px 4px 12px 4px; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
+  .hall-sec { display:flex; flex-direction:column; align-items:center; gap:2px; flex-shrink:0; min-width:0; }
   .sec-lbl { font-size:10px; color:rgba(255,255,255,0.3); margin-bottom:4px; letter-spacing:.05em; }
-  .hall-row { display:flex; gap:3px; }
-  .aisle-gap { width:16px; flex-shrink:0; }
-  .hseat { width:46px; height:40px; border:0.5px solid rgba(255,255,255,0.1); border-radius:6px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:all .12s; background:rgba(255,255,255,0.03); flex-shrink:0; }
+  .hall-row { display:flex; gap:2px; }
+  .aisle-gap { width:10px; flex-shrink:0; }
+  .hseat { width:42px; height:38px; border:0.5px solid rgba(255,255,255,0.1); border-radius:6px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:all .12s; background:rgba(255,255,255,0.03); flex-shrink:0; -webkit-tap-highlight-color:transparent; }
   .hseat:hover { border-color:rgba(255,255,255,0.35); background:rgba(255,255,255,0.08); }
   .hseat.occ-off { background:rgba(127,119,221,0.15); border-color:rgba(127,119,221,0.5); }
   .hseat.occ-zm  { background:rgba(186,117,23,0.15);  border-color:rgba(186,117,23,0.5); }
   .hseat.active-sel { border:2px solid #378ADD; background:rgba(55,138,221,0.12); }
-  .hseat .sn { font-size:9.5px; font-weight:500; line-height:1.2; text-align:center; max-width:42px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .hseat .sn { font-size:9px; font-weight:500; line-height:1.2; text-align:center; max-width:40px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   .hseat.occ-off .sn { color:#AFA9EC; }
   .hseat.occ-zm  .sn { color:#FAC775; }
   .hseat .st { font-size:8px; margin-top:1px; }
@@ -51,7 +51,7 @@
   .type-btn { flex:1; padding:7px; border:0.5px solid rgba(255,255,255,0.1); border-radius:8px; font-size:12px; cursor:pointer; background:none; color:rgba(255,255,255,0.45); transition:all .1s; text-align:center; }
   .type-btn.sel-off { background:rgba(127,119,221,0.15); border-color:rgba(127,119,221,0.5); color:#AFA9EC; font-weight:500; }
   .type-btn.sel-zm  { background:rgba(186,117,23,0.15);  border-color:rgba(186,117,23,0.5);  color:#FAC775; font-weight:500; }
-  .qchips { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; }
+  .qchips { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; max-height:180px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
   .qchip { padding:5px 11px; border:0.5px solid rgba(255,255,255,0.1); border-radius:7px; font-size:12px; cursor:pointer; color:rgba(255,255,255,0.5); background:rgba(255,255,255,0.04); transition:all .1s; user-select:none; }
   .qchip:hover { border-color:rgba(255,255,255,0.3); color:#e8e8e6; }
   .qchip.off-h:hover { background:rgba(127,119,221,0.15); border-color:rgba(127,119,221,0.5); color:#AFA9EC; }
@@ -457,13 +457,13 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 </script>
 
-<div class="max-w-6xl mx-auto px-4 py-8">
+<div class="max-w-6xl mx-auto px-3 py-6" style="box-sizing:border-box;max-width:100%;">
   <div class="mb-7">
     <h1 style="font-size:20px;font-weight:500;letter-spacing:-0.03em">모임 매니저</h1>
     <p style="font-size:13px;margin-top:4px;color:rgba(255,255,255,0.4)">참석 확인 · 좌석 배치 · 스마트 팀 매칭 — 데이터는 브라우저에 자동 저장</p>
   </div>
 
-  <div style="display:flex;gap:2px;border-bottom:0.5px solid rgba(255,255,255,0.1);margin-bottom:1.5rem">
+  <div style="display:flex;gap:2px;border-bottom:0.5px solid rgba(255,255,255,0.1);margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;scrollbar-width:none;">
     <button id="tbtn-attendance" class="tab-btn tab-active" style="background:none;border:none;border-bottom:2px solid #e8e8e6;color:#e8e8e6;font-weight:500;padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('attendance')">① 참석 확인</button>
     <button id="tbtn-seating"    class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('seating')">② 좌석 배치</button>
     <button id="tbtn-team"       class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('team')">③ 팀 빌딩</button>
@@ -472,7 +472,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   <!-- ① 참석 확인 -->
   <div id="pp-attendance" class="panel-page">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem">
       <div>
         <div class="glass rounded-xl p-5 mb-4">
           <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3);margin-bottom:12px">참석 모드</div>
@@ -484,7 +484,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">회원 명단</div>
             <span id="att-count" style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">0명</span>
           </div>
-          <div id="member-list" style="display:grid;grid-template-columns:1fr 1fr;gap:5px"></div>
+          <div id="member-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:5px"></div>
           <div style="display:flex;gap:6px;margin-top:10px">
             <button onclick="selectAll()" style="flex:1;padding:6px;border-radius:7px;border:0.5px solid rgba(255,255,255,0.1);background:none;color:rgba(255,255,255,0.5);font-size:12px;cursor:pointer" class="glass-hover">전체 선택</button>
             <button onclick="clearAll()"  style="flex:1;padding:6px;border-radius:7px;border:0.5px solid rgba(255,255,255,0.1);background:none;color:rgba(255,255,255,0.5);font-size:12px;cursor:pointer" class="glass-hover">초기화</button>
@@ -520,7 +520,9 @@ document.addEventListener('DOMContentLoaded',()=>{
       </div>
 
       <!-- Hall — 연단에서 바라보는 방향(행 1이 연단 쪽) -->
-      <div class="hall" id="hall"></div>
+      <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+        <div class="hall" id="hall" style="min-width:max-content;padding:4px 8px 12px;"></div>
+      </div>
 
       <!-- 연단 — 아래 -->
       <div class="stage-bar">— 연단 (강단) —</div>
@@ -584,7 +586,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   <!-- ④ 히스토리 -->
   <div id="pp-history" class="panel-page" style="display:none">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem">
       <div>
         <div class="glass rounded-xl p-5">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
