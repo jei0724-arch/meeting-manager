@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>모임 매니저</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+  * { font-family: 'Noto Sans KR', sans-serif; box-sizing: border-box; }
+  body { background: #0f0f0f; color: #e8e8e6; min-height: 100vh; }
+  .glass { background: rgba(255,255,255,0.04); border: 0.5px solid rgba(255,255,255,0.1); }
+  .glass-hover:hover { background: rgba(255,255,255,0.07); }
+  input, select { background: rgba(255,255,255,0.06); border: 0.5px solid rgba(255,255,255,0.15); color: #e8e8e6; border-radius: 8px; padding: 7px 10px; font-size: 13px; outline: none; }
+  input:focus, select:focus { border-color: rgba(255,255,255,0.4); }
+  select option { background: #1a1a1a; }
+  .tab-active { border-bottom: 2px solid #e8e8e6 !important; color: #e8e8e6 !important; font-weight: 500; }
+  .member-checked-off { background: rgba(127,119,221,0.15); border-color: rgba(127,119,221,0.5) !important; color: #AFA9EC; }
+  .member-checked-zm { background: rgba(186,117,23,0.15); border-color: rgba(186,117,23,0.5) !important; color: #FAC775; }
+  .btn-primary { background: #e8e8e6; color: #0f0f0f; border: none; cursor: pointer; }
+  .btn-primary:hover { opacity: 0.85; }
+  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #e8e8e6; color: #0f0f0f; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 9999; }
+  .toast.show { opacity: 1; }
+  .history-body { display: none; }
+  .history-body.open { display: block; }
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+
+  /* ── Seating Chart ── */
+  .stage-bar { text-align:center; padding: 8px 0; border: 0.5px solid rgba(255,255,255,0.15); border-radius: 8px; font-size: 12px; color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.04); letter-spacing: 0.06em; margin-bottom: 6px; }
+  .hall { display: flex; gap: 10px; align-items: flex-start; overflow-x: auto; padding-bottom: 4px; }
+  .hall-section { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
+  .sec-label { font-size: 10px; color: rgba(255,255,255,0.3); margin-bottom: 4px; letter-spacing: 0.05em; }
+  .hall-row { display: flex; gap: 3px; }
+  .aisle { width: 16px; flex-shrink: 0; }
+  .hall-seat { width: 42px; height: 36px; border: 0.5px solid rgba(255,255,255,0.1); border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: all 0.12s; background: rgba(255,255,255,0.03); flex-shrink: 0; }
+  .hall-seat:hover { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.08); }
+  .hall-seat.occ-off { background: rgba(127,119,221,0.15); border-color: rgba(127,119,221,0.5); }
+  .hall-seat.occ-zm  { background: rgba(186,117,23,0.15);  border-color: rgba(186,117,23,0.5); }
+  .hall-seat .s-name { font-size: 9.5px; font-weight: 500; line-height: 1.15; text-align: center; max-width: 38px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .hall-seat.occ-off .s-name { color: #AFA9EC; }
+  .hall-seat.occ-zm  .s-name { color: #FAC775; }
+  .hall-seat .s-type { font-size: 8px; margin-top: 1px; }
+  .hall-seat.occ-off .s-type { color: rgba(127,119,221,0.7); }
+  .hall-seat.occ-zm  .s-type { color: rgba(186,117,23,0.7); }
+  .hall-seat .s-empty { font-size: 14px; color: rgba(255,255,255,0.15); }
+  .seat-modal { border: 0.5px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 1rem 1.25rem; background: rgba(255,255,255,0.05); margin-top: 1rem; }
+  .seat-modal-title { font-size: 13px; font-weight: 500; margin-bottom: 10px; }
+  .modal-input-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .modal-input-row label { font-size: 12px; color: rgba(255,255,255,0.45); min-width: 36px; }
+  .modal-input-row input, .modal-input-row select { flex: 1; min-width: 120px; height: 32px; padding: 0 8px; }
+  .quick-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+  .qchip { padding: 3px 9px; border: 0.5px solid rgba(255,255,255,0.1); border-radius: 6px; font-size: 11px; cursor: pointer; color: rgba(255,255,255,0.5); background: rgba(255,255,255,0.04); transition: all 0.1s; }
+  .qchip:hover { border-color: rgba(255,255,255,0.3); color: #e8e8e6; }
+  .qchip.used { opacity: 0.25; pointer-events: none; text-decoration: line-through; }
+  .btn-sm-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn-sm { padding: 5px 14px; font-size: 12px; border: 0.5px solid rgba(255,255,255,0.15); border-radius: 7px; cursor: pointer; background: none; color: #e8e8e6; transition: all 0.1s; }
+  .btn-sm:hover { background: rgba(255,255,255,0.08); }
+  .btn-sm.primary { background: #e8e8e6; color: #0f0f0f; border-color: #e8e8e6; }
+  .btn-sm.primary:hover { opacity: 0.82; }
+  .btn-sm.danger { color: #F0997B; border-color: rgba(216,90,48,0.4); }
+  .btn-sm.danger:hover { background: rgba(216,90,48,0.1); }
+  .seat-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .ss-chip { font-size: 11px; padding: 3px 10px; border-radius: 6px; }
+  .ss-chip.off { background: rgba(127,119,221,0.15); color: #AFA9EC; }
+  .ss-chip.zm  { background: rgba(186,117,23,0.15);  color: #FAC775; }
+</style>
+</head>
+<body>
+
+<script>
+/* =====================================================
+   ✏️  회원 명단 — 이름 추가/삭제만 하면 됩니다
+===================================================== */
+const DEFAULT_MEMBERS = [
+  "김민준","이서연","박지우","최수아","정우진",
+  "강나은","윤도현","임예린","한승호","오지현",
+  "조민서","신재원","류하은","황성민","백다은"
+];
+
+/* =====================================================
+   좌석 구조 정의 — 열수/행수 변경 가능
+===================================================== */
+const HALL_SECTIONS = [
+  { id:'L', label:'좌측',  cols:3, rows:8 },
+  { id:'C', label:'중앙',  cols:7, rows:8 },
+  { id:'R', label:'우측',  cols:3, rows:8 },
+];
+
+/* ─── 팀 색상 ─── */
+const TEAM_COLORS = [
+  { bg:'rgba(127,119,221,0.12)', border:'rgba(127,119,221,0.4)', text:'#AFA9EC', dot:'#7F77DD' },
+  { bg:'rgba(29,158,117,0.12)',  border:'rgba(29,158,117,0.4)',  text:'#5DCAA5', dot:'#1D9E75' },
+  { bg:'rgba(216,90,48,0.12)',   border:'rgba(216,90,48,0.4)',   text:'#F0997B', dot:'#D85A30' },
+  { bg:'rgba(186,117,23,0.12)',  border:'rgba(186,117,23,0.4)',  text:'#FAC775', dot:'#BA7517' },
+  { bg:'rgba(212,83,126,0.12)', border:'rgba(212,83,126,0.4)', text:'#ED93B1', dot:'#D4537E' },
+  { bg:'rgba(99,153,34,0.12)',   border:'rgba(99,153,34,0.4)',   text:'#C0DD97', dot:'#639922' },
+];
+
+/* ─── State ─── */
+let appState = { mode:'offline', attendance:{} };
+function loadLS(k,d){ try{ return JSON.parse(localStorage.getItem(k))??d; }catch{ return d; } }
+function saveLS(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch{} }
+
+let attLog   = loadLS('mg_att_log', []);
+let teamLog  = loadLS('mg_team_log', []);
+let seatData = loadLS('mg_seats', {});
+let currentTeams = null;
+let activeSeatId = null;
+
+/* ─── Tab switching ─── */
+function switchTab(name){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('tab-active'));
+  document.getElementById('tbtn-'+name).classList.add('tab-active');
+  document.querySelectorAll('.panel').forEach(p=>p.style.display='none');
+  document.getElementById('panel-'+name).style.display='block';
+  if(name==='team') updateTeamInfo();
+  if(name==='seating') renderHall();
+}
+
+/* ══════════════════════════════
+   TAB 1 — Attendance
+══════════════════════════════ */
+function setMode(m){
+  appState.mode=m;
+  ['offline','zoom'].forEach(v=>{
+    document.getElementById('mode-'+v).classList.toggle('mode-on', v===m);
+  });
+  renderMemberList();
+}
+function toggleMember(name){
+  if(appState.attendance[name]===appState.mode) delete appState.attendance[name];
+  else appState.attendance[name]=appState.mode;
+  renderMemberList(); updateAttSummary();
+}
+function selectAll(){ DEFAULT_MEMBERS.forEach(n=>{ appState.attendance[n]=appState.mode; }); renderMemberList(); updateAttSummary(); }
+function clearAll(){ appState.attendance={}; renderMemberList(); updateAttSummary(); }
+function renderMemberList(){
+  const el=document.getElementById('member-list');
+  el.innerHTML=DEFAULT_MEMBERS.map(name=>{
+    const att=appState.attendance[name];
+    let cls='flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm glass glass-hover';
+    if(att==='offline') cls+=' member-checked-off';
+    else if(att==='zoom') cls+=' member-checked-zm';
+    const bg=att==='zoom'?'background:rgba(186,117,23,0.25);color:#FAC775':'background:rgba(127,119,221,0.25);color:#AFA9EC';
+    return `<div class="${cls}" onclick="toggleMember('${name}')">
+      <div style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0;${bg}">${name[0]}</div>
+      <span>${name}</span>
+      ${att?'<svg style="margin-left:auto;flex-shrink:0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>':''}
+    </div>`;
+  }).join('');
+  document.getElementById('att-count').textContent=Object.keys(appState.attendance).length+'명';
+}
+function updateAttSummary(){
+  const vals=Object.values(appState.attendance);
+  const off=vals.filter(v=>v==='offline').length;
+  const zm=vals.filter(v=>v==='zoom').length;
+  document.getElementById('att-summary').innerHTML=`
+    <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:12px;background:rgba(127,119,221,0.15);color:#AFA9EC">● 오프라인 ${off}명</span>
+    <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:12px;background:rgba(186,117,23,0.15);color:#FAC775">● 줌 ${zm}명</span>
+    <span style="font-size:12px;color:rgba(255,255,255,0.4)">총 ${off+zm}명</span>`;
+  updateTeamInfo();
+}
+function saveAttendance(){
+  const attendees=Object.entries(appState.attendance);
+  if(!attendees.length){ showToast('참석자를 먼저 선택해주세요'); return; }
+  const now=new Date();
+  const ds=now.toLocaleDateString('ko-KR')+' '+now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  attLog.unshift({date:ds,attendees,timestamp:now.getTime()});
+  saveLS('mg_att_log',attLog);
+  renderRecentLog(); renderHistory(); showToast('✓ 참석 기록이 저장되었습니다');
+}
+function renderRecentLog(){
+  const el=document.getElementById('recent-log');
+  if(!attLog.length){ el.innerHTML='<div style="text-align:center;padding:1rem;font-size:12px;color:rgba(255,255,255,0.3)">아직 기록이 없습니다</div>'; return; }
+  el.innerHTML=attLog.slice(0,4).map(log=>{
+    const off=log.attendees.filter(([,t])=>t==='offline').map(([n])=>n);
+    const zm=log.attendees.filter(([,t])=>t==='zoom').map(([n])=>n);
+    return `<div class="glass rounded-lg p-3 mb-2">
+      <div style="font-size:11px;font-weight:500;margin-bottom:4px;color:rgba(255,255,255,0.6)">${log.date}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);line-height:1.7">
+        ${off.length?`<span style="color:#AFA9EC">●</span> ${off.join(', ')}<br>`:''}
+        ${zm.length?`<span style="color:#FAC775">●</span> ${zm.join(', ')}`:''}
+      </div></div>`;
+  }).join('');
+}
+
+/* ══════════════════════════════
+   TAB 2 — Seating Chart
+══════════════════════════════ */
+function seatKey(secId,r,c){ return secId+'-'+r+'-'+c; }
+
+function renderHall(){
+  const hall=document.getElementById('hall');
+  hall.innerHTML='';
+  HALL_SECTIONS.forEach((sec,si)=>{
+    if(si>0){ const a=document.createElement('div'); a.className='aisle'; hall.appendChild(a); }
+    const wrap=document.createElement('div'); wrap.className='hall-section';
+    const lbl=document.createElement('div'); lbl.className='sec-label'; lbl.textContent=sec.label+' ('+sec.cols+'×'+sec.rows+')';
+    wrap.appendChild(lbl);
+    for(let r=0;r<sec.rows;r++){
+      const row=document.createElement('div'); row.className='hall-row';
+      for(let c=0;c<sec.cols;c++){
+        const key=seatKey(sec.id,r,c);
+        const btn=document.createElement('div'); btn.className='hall-seat'; btn.id='hs-'+key;
+        btn.onclick=()=>openSeatModal(key,sec.label,r+1,c+1);
+        renderOneSeat(btn,key);
+        row.appendChild(btn);
+      }
+      wrap.appendChild(row);
+    }
+    hall.appendChild(wrap);
+  });
+  updateSeatSummary();
+}
+
+function renderOneSeat(el,key){
+  const d=seatData[key];
+  el.innerHTML='';
+  if(d){
+    el.className='hall-seat '+(d.type==='zoom'?'occ-zm':'occ-off');
+    el.innerHTML=`<div class="s-name">${d.name}</div><div class="s-type">${d.type==='zoom'?'줌':'오프'}</div>`;
+  } else {
+    el.className='hall-seat';
+    el.innerHTML='<div class="s-empty">+</div>';
+  }
+}
+
+function openSeatModal(key,secLabel,row,col){
+  activeSeatId=key;
+  const d=seatData[key];
+  document.getElementById('smodal-title').textContent=secLabel+' '+row+'행 '+col+'열';
+  document.getElementById('smodal-name').value=d?d.name:'';
+  document.getElementById('smodal-type').value=d?d.type:'offline';
+  document.getElementById('smodal-clear').style.display=d?'inline-flex':'none';
+  buildQChips();
+  document.getElementById('seat-modal').style.display='block';
+  document.getElementById('smodal-name').focus();
+}
+function closeSeatModal(){ document.getElementById('seat-modal').style.display='none'; activeSeatId=null; }
+
+function buildQChips(){
+  const used=new Set(Object.entries(seatData).filter(([k])=>k!==activeSeatId).map(([,v])=>v.name));
+  const el=document.getElementById('quick-chips');
+  el.innerHTML=DEFAULT_MEMBERS.map(name=>{
+    const cls='qchip'+(used.has(name)?' used':'');
+    return `<span class="${cls}" onclick="document.getElementById('smodal-name').value='${name}'">${name}</span>`;
+  }).join('');
+}
+
+function confirmSeat(){
+  const name=document.getElementById('smodal-name').value.trim();
+  if(!name){ document.getElementById('smodal-name').focus(); return; }
+  const type=document.getElementById('smodal-type').value;
+  seatData[activeSeatId]={name,type};
+  saveLS('mg_seats',seatData);
+  const el=document.getElementById('hs-'+activeSeatId);
+  if(el) renderOneSeat(el,activeSeatId);
+  updateSeatSummary(); closeSeatModal();
+}
+function clearSeat(){
+  delete seatData[activeSeatId];
+  saveLS('mg_seats',seatData);
+  const el=document.getElementById('hs-'+activeSeatId);
+  if(el) renderOneSeat(el,activeSeatId);
+  updateSeatSummary(); closeSeatModal();
+}
+function clearAllSeats(){
+  if(!confirm('모든 자리 배정을 초기화할까요?')) return;
+  seatData={}; saveLS('mg_seats',seatData); renderHall(); showToast('자리 배정이 초기화되었습니다');
+}
+function saveSeatLog(){
+  const all=Object.entries(seatData);
+  if(!all.length){ showToast('배정된 자리가 없습니다'); return; }
+  const now=new Date();
+  const ds=now.toLocaleDateString('ko-KR')+' '+now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  const snap=HALL_SECTIONS.map(sec=>{
+    const entries=[];
+    for(let r=0;r<sec.rows;r++) for(let c=0;c<sec.cols;c++){
+      const k=seatKey(sec.id,r,c);
+      if(seatData[k]) entries.push({...seatData[k],row:r+1,col:c+1,section:sec.label});
+    }
+    return {section:sec.label,seats:entries};
+  });
+  const log={date:ds,snapshot:snap,timestamp:now.getTime()};
+  let sl=loadLS('mg_seat_log',[]);
+  sl.unshift(log); saveLS('mg_seat_log',sl);
+  showToast('✓ 자리 배치가 저장되었습니다');
+}
+function updateSeatSummary(){
+  const all=Object.values(seatData);
+  const el=document.getElementById('seat-summary');
+  if(!all.length){ el.innerHTML='<span style="font-size:12px;color:rgba(255,255,255,0.3)">배정된 자리가 없습니다</span>'; return; }
+  const off=all.filter(s=>s.type==='offline');
+  const zm=all.filter(s=>s.type==='zoom');
+  el.innerHTML=(off.length?`<span class="ss-chip off">오프라인 ${off.length}명: ${off.map(s=>s.name).join(', ')}</span>`:'')+
+               (zm.length?`<span class="ss-chip zm">줌 ${zm.length}명: ${zm.map(s=>s.name).join(', ')}</span>`:'');
+}
+
+/* ══════════════════════════════
+   TAB 3 — Team Building
+══════════════════════════════ */
+function updateTeamInfo(){
+  const el=document.getElementById('team-att-info');
+  if(!el) return;
+  const total=Object.keys(appState.attendance).length;
+  el.textContent=total?'현재 참석 인원: '+total+'명을 기반으로 팀을 구성합니다.':'참석 탭에서 참석자를 선택해주세요.';
+}
+function getPairCount(n1,n2){
+  let cnt=0;
+  teamLog.forEach(log=>log.teams.forEach(team=>{ if(team.includes(n1)&&team.includes(n2)) cnt++; }));
+  return cnt;
+}
+function generateTeams(){
+  const attendees=Object.keys(appState.attendance);
+  if(attendees.length<2){ showToast('참석자가 최소 2명 이상 필요합니다'); return; }
+  const mode=document.getElementById('team-mode-sel').value;
+  const val=parseInt(document.getElementById('team-val').value)||3;
+  let numTeams=mode==='count'?Math.min(val,attendees.length):Math.max(1,Math.floor(attendees.length/val));
+  const shuffled=[...attendees].sort(()=>Math.random()-0.5);
+  let teams=Array.from({length:numTeams},()=>[]);
+  shuffled.forEach(person=>{
+    let best=0,minP=Infinity;
+    teams.forEach((team,t)=>{
+      const maxSz=Math.ceil(shuffled.length/numTeams)+1;
+      if(team.length>=maxSz) return;
+      let p=team.reduce((s,m)=>s+getPairCount(person,m)*10,0)+team.length*0.01;
+      if(p<minP){ minP=p; best=t; }
+    });
+    teams[best].push(person);
+  });
+  currentTeams=teams;
+  renderTeamResult(teams);
+  document.getElementById('team-result').style.display='block';
+}
+function renderTeamResult(teams){
+  const grid=document.getElementById('team-grid');
+  grid.innerHTML=teams.map((team,i)=>{
+    const c=TEAM_COLORS[i%TEAM_COLORS.length];
+    const members=team.map(name=>{
+      const type=appState.attendance[name];
+      return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:0.5px solid rgba(255,255,255,0.06);font-size:12px">
+        <div style="width:7px;height:7px;border-radius:50%;background:${c.dot};flex-shrink:0"></div>
+        <span>${name}</span>
+        <span style="margin-left:auto;font-size:10px;color:${type==='zoom'?'#FAC775':'#AFA9EC'}">${type==='zoom'?'줌':'오프'}</span>
+      </div>`;
+    }).join('');
+    return `<div style="background:${c.bg};border:0.5px solid ${c.border};border-radius:12px;padding:14px">
+      <div style="color:${c.text};font-size:12px;font-weight:500;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid ${c.border}">
+        <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.dot};margin-right:6px"></span>
+        팀 ${i+1} <span style="font-weight:400;font-size:11px;opacity:0.7">${team.length}명</span>
+      </div>${members}</div>`;
+  }).join('');
+  const pairs=[];
+  const names=Object.keys(appState.attendance);
+  names.forEach((p1,i)=>names.slice(i+1).forEach(p2=>{ const cnt=getPairCount(p1,p2); if(cnt>0) pairs.push({p1,p2,cnt}); }));
+  pairs.sort((a,b)=>b.cnt-a.cnt);
+  const pEl=document.getElementById('pair-info');
+  if(!pairs.length){ pEl.innerHTML='<p style="color:rgba(255,255,255,0.4);font-size:12px">이번이 첫 번째 매칭입니다.</p>'; }
+  else { pEl.innerHTML=pairs.slice(0,12).map(p=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid rgba(255,255,255,0.06);font-size:12px"><span style="color:rgba(255,255,255,0.6)">${p.p1} + ${p.p2}</span><span style="margin-left:auto;font-weight:500;color:${p.cnt>=3?'#F0997B':p.cnt>=2?'#FAC775':'#5DCAA5'}">${p.cnt}회</span></div>`).join(''); }
+}
+function saveTeams(){
+  if(!currentTeams) return;
+  const now=new Date();
+  const ds=now.toLocaleDateString('ko-KR')+' '+now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  teamLog.unshift({date:ds,teams:currentTeams,timestamp:now.getTime()});
+  saveLS('mg_team_log',teamLog); renderHistory(); showToast('✓ 팀 구성이 저장되었습니다');
+}
+
+/* ══════════════════════════════
+   TAB 4 — History
+══════════════════════════════ */
+function renderHistory(){ renderAttHistory(); renderTeamHistory(); }
+function renderAttHistory(){
+  const el=document.getElementById('att-hist-list');
+  if(!attLog.length){ el.innerHTML='<div style="text-align:center;padding:2rem;font-size:12px;color:rgba(255,255,255,0.3)">기록 없음</div>'; return; }
+  el.innerHTML=attLog.map((log,i)=>{
+    const off=log.attendees.filter(([,t])=>t==='offline').map(([n])=>n);
+    const zm=log.attendees.filter(([,t])=>t==='zoom').map(([n])=>n);
+    return `<div class="glass rounded-lg mb-2 overflow-hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer" onclick="document.getElementById('ah-${i}').classList.toggle('open')">
+        <span style="font-size:13px">${log.date}</span>
+        <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">${log.attendees.length}명</span>
+      </div>
+      <div class="history-body" id="ah-${i}" style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07);font-size:12px;color:rgba(255,255,255,0.5);line-height:1.8">
+        ${off.length?`<div><span style="color:#AFA9EC">● 오프라인</span> — ${off.join(', ')}</div>`:''}
+        ${zm.length?`<div><span style="color:#FAC775">● 줌</span> — ${zm.join(', ')}</div>`:''}
+      </div></div>`;
+  }).join('');
+}
+function renderTeamHistory(){
+  const el=document.getElementById('team-hist-list');
+  if(!teamLog.length){ el.innerHTML='<div style="text-align:center;padding:2rem;font-size:12px;color:rgba(255,255,255,0.3)">기록 없음</div>'; return; }
+  el.innerHTML=teamLog.map((log,i)=>{
+    const total=log.teams.reduce((s,t)=>s+t.length,0);
+    const th=log.teams.map((team,ti)=>{
+      const c=TEAM_COLORS[ti%TEAM_COLORS.length];
+      return `<div style="margin-bottom:4px"><span style="color:${c.text};font-size:11px">팀 ${ti+1}</span> <span style="color:rgba(255,255,255,0.45);font-size:12px">— ${team.join(', ')}</span></div>`;
+    }).join('');
+    return `<div class="glass rounded-lg mb-2 overflow-hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer" onclick="document.getElementById('th-${i}').classList.toggle('open')">
+        <span style="font-size:13px">${log.date}</span>
+        <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">${log.teams.length}팀 · ${total}명</span>
+      </div>
+      <div class="history-body" id="th-${i}" style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07)">${th}</div></div>`;
+  }).join('');
+}
+function clearAttLog(){ if(!attLog.length) return; if(!confirm('참석 기록을 모두 삭제할까요?')) return; attLog=[]; saveLS('mg_att_log',attLog); renderRecentLog(); renderAttHistory(); showToast('삭제되었습니다'); }
+function clearTeamLog(){ if(!teamLog.length) return; if(!confirm('팀 빌딩 기록을 모두 삭제할까요?')) return; teamLog=[]; saveLS('mg_team_log',teamLog); renderTeamHistory(); showToast('삭제되었습니다'); }
+
+/* ─── Toast ─── */
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
+
+/* ─── Init ─── */
+document.addEventListener('DOMContentLoaded',()=>{
+  renderMemberList(); updateAttSummary(); renderRecentLog(); renderHistory(); updateTeamInfo();
+  document.getElementById('team-mode-sel').addEventListener('change',function(){ document.getElementById('team-val-label').textContent=this.value==='count'?'개 팀':'명씩'; });
+});
+</script>
+
+<div class="max-w-6xl mx-auto px-4 py-8">
+
+  <!-- Header -->
+  <div class="mb-7">
+    <h1 style="font-size:20px;font-weight:500;letter-spacing:-0.03em">모임 매니저</h1>
+    <p style="font-size:13px;margin-top:4px;color:rgba(255,255,255,0.4)">참석 확인 · 좌석 배치 · 스마트 팀 매칭 — 모든 데이터는 브라우저에 자동 저장됩니다</p>
+  </div>
+
+  <!-- Tabs -->
+  <div style="display:flex;gap:2px;border-bottom:0.5px solid rgba(255,255,255,0.1);margin-bottom:1.5rem">
+    <button id="tbtn-attendance" class="tab-btn tab-active" style="background:none;border:none;border-bottom:2px solid #e8e8e6;color:#e8e8e6;font-weight:500;padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('attendance')">① 참석 확인</button>
+    <button id="tbtn-seating"    class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('seating')">② 좌석 배치</button>
+    <button id="tbtn-team"       class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('team')">③ 팀 빌딩</button>
+    <button id="tbtn-history"    class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('history')">④ 히스토리</button>
+  </div>
+
+  <!-- Panel 1: Attendance -->
+  <div id="panel-attendance" class="panel">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div>
+        <div class="glass rounded-xl p-5 mb-4">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:rgba(255,255,255,0.3);margin-bottom:12px">참석 모드</div>
+          <div style="display:flex;gap:8px;margin-bottom:1rem">
+            <button id="mode-offline" onclick="setMode('offline')" class="mode-on" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:0.5px solid rgba(127,119,221,0.5);background:rgba(127,119,221,0.12);color:#AFA9EC;font-size:13px;cursor:pointer">🙋 오프라인</button>
+            <button id="mode-zoom"    onclick="setMode('zoom')"    style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:none;color:rgba(255,255,255,0.45);font-size:13px;cursor:pointer">💻 줌(온라인)</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:rgba(255,255,255,0.3)">회원 명단</div>
+            <span id="att-count" style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">0명</span>
+          </div>
+          <div id="member-list" style="display:grid;grid-template-columns:1fr 1fr;gap:5px"></div>
+          <div style="display:flex;gap:6px;margin-top:10px">
+            <button onclick="selectAll()" style="flex:1;padding:6px;border-radius:7px;border:0.5px solid rgba(255,255,255,0.1);background:none;color:rgba(255,255,255,0.5);font-size:12px;cursor:pointer" class="glass-hover">전체 선택</button>
+            <button onclick="clearAll()"  style="flex:1;padding:6px;border-radius:7px;border:0.5px solid rgba(255,255,255,0.1);background:none;color:rgba(255,255,255,0.5);font-size:12px;cursor:pointer" class="glass-hover">초기화</button>
+          </div>
+        </div>
+        <div class="glass rounded-xl p-5">
+          <div id="att-summary" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+          <button onclick="saveAttendance()" class="btn-primary w-full py-2.5 rounded-lg" style="font-size:13px;font-weight:500">참석 기록 저장</button>
+        </div>
+      </div>
+      <div>
+        <div class="glass rounded-xl p-5">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:rgba(255,255,255,0.3);margin-bottom:10px">최근 참석 기록</div>
+          <div id="recent-log"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 2: Seating -->
+  <div id="panel-seating" class="panel" style="display:none">
+    <div class="glass rounded-xl p-5 mb-4">
+      <!-- Legend -->
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,0.5)"><div style="width:9px;height:9px;border-radius:50%;background:#7F77DD"></div>오프라인</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,0.5)"><div style="width:9px;height:9px;border-radius:50%;background:#BA7517"></div>줌</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,0.5)"><div style="width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,0.15)"></div>빈 자리</div>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button onclick="saveSeatLog()" class="btn-sm primary">배치 저장</button>
+          <button onclick="clearAllSeats()" class="btn-sm danger">전체 초기화</button>
+        </div>
+      </div>
+      <!-- Stage -->
+      <div class="stage-bar" style="max-width:220px;margin:0 auto 8px">— 연단 (강단) —</div>
+      <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.2);margin-bottom:10px;letter-spacing:0.04em">↑ 앞쪽</div>
+      <!-- Hall -->
+      <div class="hall" id="hall"></div>
+      <!-- Summary -->
+      <div class="seat-summary" id="seat-summary" style="margin-top:12px;padding-top:12px;border-top:0.5px solid rgba(255,255,255,0.07)"></div>
+    </div>
+
+    <!-- Seat Assignment Modal (inline) -->
+    <div id="seat-modal" class="seat-modal" style="display:none">
+      <div class="seat-modal-title" id="smodal-title">자리 배정</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px">참석자 명단에서 빠르게 선택:</div>
+      <div class="quick-chips" id="quick-chips"></div>
+      <div class="modal-input-row">
+        <label>이름</label>
+        <input type="text" id="smodal-name" placeholder="직접 입력 가능">
+      </div>
+      <div class="modal-input-row">
+        <label>유형</label>
+        <select id="smodal-type">
+          <option value="offline">오프라인</option>
+          <option value="zoom">줌(온라인)</option>
+        </select>
+      </div>
+      <div class="btn-sm-row">
+        <button class="btn-sm primary" onclick="confirmSeat()">배정 확인</button>
+        <button class="btn-sm danger" id="smodal-clear" onclick="clearSeat()" style="display:none">자리 비우기</button>
+        <button class="btn-sm" onclick="closeSeatModal()">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 3: Team Building -->
+  <div id="panel-team" class="panel" style="display:none">
+    <div class="glass rounded-xl p-5 mb-4">
+      <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:rgba(255,255,255,0.3);margin-bottom:12px">팀 구성 설정</div>
+      <div id="team-att-info" style="font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:14px"></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <select id="team-mode-sel">
+          <option value="count">팀 개수로 나누기</option>
+          <option value="size">팀당 인원으로 나누기</option>
+        </select>
+        <input type="number" id="team-val" value="3" min="2" max="20" style="width:64px">
+        <span id="team-val-label" style="font-size:13px;color:rgba(255,255,255,0.4)">개 팀</span>
+      </div>
+      <button onclick="generateTeams()" class="btn-primary px-6 py-2.5 rounded-lg" style="font-size:13px;font-weight:500">✦ 팀 자동 매칭</button>
+    </div>
+    <div id="team-result" style="display:none">
+      <div class="glass rounded-xl p-5 mb-4">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:rgba(255,255,255,0.3)">매칭 결과</div>
+          <button onclick="saveTeams()" class="btn-sm primary">이 팀 구성 저장</button>
+        </div>
+        <div id="team-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px"></div>
+      </div>
+      <div class="glass rounded-xl p-5">
+        <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:rgba(255,255,255,0.3);margin-bottom:6px">중복 가중치 현황</div>
+        <p style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:10px">과거 같은 팀이 된 횟수 — 많을수록 다른 팀으로 분리</p>
+        <div id="pair-info"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 4: History -->
+  <div id="panel-history" class="panel" style="display:none">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div>
+        <div class="glass rounded-xl p-5">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:rgba(255,255,255,0.3)">참석 기록</div>
+            <button onclick="clearAttLog()" class="btn-sm danger" style="font-size:11px;padding:3px 10px">전체 삭제</button>
+          </div>
+          <div id="att-hist-list" style="max-height:520px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div>
+        <div class="glass rounded-xl p-5">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="font-size:11px;font-weight:500;letter-spacing:0.06em;color:rgba(255,255,255,0.3)">팀 빌딩 기록</div>
+            <button onclick="clearTeamLog()" class="btn-sm danger" style="font-size:11px;padding:3px 10px">전체 삭제</button>
+          </div>
+          <div id="team-hist-list" style="max-height:520px;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+</body>
+</html>
