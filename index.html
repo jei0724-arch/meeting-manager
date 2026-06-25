@@ -76,19 +76,19 @@
    ✏️  회원 명단 — 이름만 추가/삭제하세요
 ===================================================== */
 const DEFAULT_MEMBERS = [
-  "김선영","김수영","김슬아","김시후","김은식","김지은","김한별","백명현","윤영미","이명희",
-  "이현재","정건영","정규식","정재원","정혜진","현은경","홍성순","김은경","김지민A","김지훈",
-  "김충자","김휘주","라용선","박건하","박미진","박우빈","신나라","유승현","이계분","이지희",
-  "임나리","전영선","한용준","공영엽","김대윤","김선향","김아름","김윤숙","김인정","박시용",
-  "신은서","신정규","신현서","양준석","오미애","유용순","이도경","김두리","김민지","김부금",
-  "김설","김원철","김은희","김인숙","배순자","배종민","신희주","은지연","이순자","이종민",
-  "전진","정은영","홍성준","강한나B","김경국","김남인","김세웅","김은솔","김소리","김여은",
-  "김재민","김한솔","송지은","유승겸","유효린","이지현","홍석준","강한나A","김보현","김휘진",
-  "나용식","박표진","변도출","변수민","송명순","신승아","이수련","이은경","정한비슬","조민우",
-  "차희영","최대식","최선희","허영옥","홍라온","강향희","곽종희","김우준","김이순","김지민B",
-  "김태웅","문흥순","박상민","박서현","배석순","배슬기","배현주","서진영","안아리","유성훈",
-  "최수지","홍정희","공진호","구명자","김보미","김홍민","박옥녀","용서광","윤기현","이대식",
-  "이은영","이화순","임승빈","임태규","정지윤","조준기","최승호","하정숙"
+  "강한나A","강한나B","강향희","공영엽","공진호","곽종희","구명자","김경국","김남인","김대윤",
+  "김두리","김민지","김보미","김보현","김부금","김선영","김선향","김설","김세웅","김소리",
+  "김수영","김슬아","김시후","김아름","김여은","김우준","김원철","김윤숙","김은경","김은솔",
+  "김은식","김은희","김이순","김인숙","김인정","김재민","김지민A","김지민B","김지은","김지훈",
+  "김충자","김태웅","김한별","김한솔","김홍민","김휘주","김휘진","나용식","라용선","문흥순",
+  "박건하","박미진","박상민","박서현","박시용","박옥녀","박우빈","박표진","배석순","배순자",
+  "배슬기","배종민","배현주","백명현","변도출","변수민","서진영","송명순","송지은","신나라",
+  "신승아","신은서","신정규","신현서","신희주","안아리","양준석","오미애","용서광","유성훈",
+  "유승겸","유승현","유용순","유효린","윤기현","윤영미","은지연","이계분","이대식","이도경",
+  "이명희","이수련","이순자","이은경","이은영","이종민","이지현","이지희","이현재","이화순",
+  "임나리","임승빈","임태규","전영선","전진","정건영","정규식","정은영","정재원","정지윤",
+  "정한비슬","정혜진","조민우","조준기","차희영","최대식","최선희","최수지","최승호","하정숙",
+  "한용준","허영옥","현은경","홍라온","홍석준","홍성순","홍성준","홍정희"
 ];
 
 /* =====================================================
@@ -245,6 +245,11 @@ function renderOneSeat(el,key){
 }
 
 function openSeatPanel(key,secLabel,row,col){
+  // 이미 배정된 자리를 다시 클릭하면 바로 비우기
+  if(activeId===key && seatData[key]){
+    clearSeatEntry();
+    return;
+  }
   if(activeId){
     const prev=document.getElementById('hs-'+activeId);
     if(prev) prev.classList.remove('active-sel');
@@ -258,6 +263,8 @@ function openSeatPanel(key,secLabel,row,col){
   setSeatType(curType);
   document.getElementById('sp-input').value=d?d.name:'';
   document.getElementById('sp-clear').style.display=d?'inline-flex':'none';
+  const hint=document.getElementById('sp-occupied-hint');
+  if(hint){ hint.style.display=d?'block':'none'; if(d) document.getElementById('sp-occupied-name').textContent=d.name; }
   buildQChips();
   document.getElementById('seat-panel').style.display='block';
 }
@@ -291,6 +298,7 @@ function assignSeat(name){
   if(el){ el.classList.remove('active-sel'); renderOneSeat(el,activeId); }
   document.getElementById('sp-clear').style.display='inline-flex';
   document.getElementById('sp-input').value=name;
+  const ah=document.getElementById('sp-occupied-hint'); if(ah){ ah.style.display='block'; document.getElementById('sp-occupied-name').textContent=name; }
   updateSeatSummary(); buildQChips();
 }
 
@@ -302,6 +310,7 @@ function clearSeatEntry(){
   if(el){ el.classList.remove('active-sel'); renderOneSeat(el,activeId); }
   document.getElementById('sp-clear').style.display='none';
   document.getElementById('sp-input').value='';
+  const ch=document.getElementById('sp-occupied-hint'); if(ch) ch.style.display='none';
   updateSeatSummary(); buildQChips();
 }
 
@@ -522,7 +531,14 @@ document.addEventListener('DOMContentLoaded',()=>{
 
     <!-- 자리 배정 패널 (클릭 즉시 반영) -->
     <div id="seat-panel" class="seat-panel" style="display:none">
-      <div style="font-size:13px;font-weight:500;margin-bottom:10px" id="sp-title">자리 배정</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:500" id="sp-title">자리 배정</div>
+        <button id="sp-clear" onclick="clearSeatEntry()" style="display:none;padding:5px 14px;font-size:12px;font-weight:500;border:1.5px solid rgba(216,90,48,0.6);border-radius:7px;background:rgba(216,90,48,0.15);color:#F0997B;cursor:pointer">✕ 자리 비우기</button>
+      </div>
+
+      <div id="sp-occupied-hint" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:7px;background:rgba(216,90,48,0.1);border:0.5px solid rgba(216,90,48,0.3);font-size:12px;color:#F0997B">
+        현재 배정: <span id="sp-occupied-name" style="font-weight:500"></span> — 다른 이름을 클릭하면 교체, 위 버튼을 누르면 비워집니다
+      </div>
 
       <div class="type-row">
         <button class="type-btn sel-off" id="stype-off" onclick="setSeatType('offline')">🙋 오프라인</button>
@@ -534,7 +550,6 @@ document.addEventListener('DOMContentLoaded',()=>{
 
       <div class="manual-row">
         <input type="text" id="sp-input" placeholder="직접 입력 후 Enter">
-        <button class="btn-sm danger" id="sp-clear" onclick="clearSeatEntry()" style="display:none">자리 비우기</button>
       </div>
     </div>
   </div>
