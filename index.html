@@ -27,23 +27,25 @@
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
 
   /* ── Seating ── */
-  .hall { display:flex; gap:8px; align-items:flex-start; overflow-x:auto; padding:4px 4px 12px 4px; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
-  .hall-sec { display:flex; flex-direction:column; align-items:center; gap:2px; flex-shrink:0; min-width:0; }
-  .sec-lbl { font-size:10px; color:rgba(255,255,255,0.3); margin-bottom:4px; letter-spacing:.05em; }
-  .hall-row { display:flex; gap:2px; }
-  .aisle-gap { width:10px; flex-shrink:0; }
-  .hseat { width:42px; height:38px; border:0.5px solid rgba(255,255,255,0.1); border-radius:6px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:all .12s; background:rgba(255,255,255,0.03); flex-shrink:0; -webkit-tap-highlight-color:transparent; }
+  .hall-wrap { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .hall { display:inline-flex; align-items:flex-start; padding:4px 2px 12px; }
+  .hall-center { display:flex; justify-content:center; min-width:100%; }
+  .hall-sec { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
+  .sec-lbl { color:rgba(255,255,255,0.3); letter-spacing:.05em; text-align:center; white-space:nowrap; }
+  .hall-row { display:flex; }
+  .aisle-gap { flex-shrink:0; }
+  .hseat { border:0.5px solid rgba(255,255,255,0.1); border-radius:5px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:all .12s; background:rgba(255,255,255,0.03); flex-shrink:0; -webkit-tap-highlight-color:transparent; }
   .hseat:hover { border-color:rgba(255,255,255,0.35); background:rgba(255,255,255,0.08); }
   .hseat.occ-off { background:rgba(127,119,221,0.15); border-color:rgba(127,119,221,0.5); }
   .hseat.occ-zm  { background:rgba(186,117,23,0.15);  border-color:rgba(186,117,23,0.5); }
-  .hseat.active-sel { border:2px solid #378ADD; background:rgba(55,138,221,0.12); }
-  .hseat .sn { font-size:9px; font-weight:500; line-height:1.2; text-align:center; max-width:40px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .hseat.active-sel { border:2px solid #378ADD !important; background:rgba(55,138,221,0.12) !important; }
+  .hseat .sn { font-weight:500; line-height:1.2; text-align:center; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   .hseat.occ-off .sn { color:#AFA9EC; }
   .hseat.occ-zm  .sn { color:#FAC775; }
-  .hseat .st { font-size:8px; margin-top:1px; }
+  .hseat .st { margin-top:1px; }
   .hseat.occ-off .st { color:rgba(127,119,221,0.7); }
   .hseat.occ-zm  .st { color:rgba(186,117,23,0.7); }
-  .hseat .se { font-size:18px; color:rgba(255,255,255,0.15); }
+  .hseat .se { color:rgba(255,255,255,0.15); }
   .stage-bar { text-align:center; padding:9px; border:0.5px solid rgba(255,255,255,0.15); border-radius:8px; font-size:12px; color:rgba(255,255,255,0.4); background:rgba(255,255,255,0.04); letter-spacing:.06em; max-width:220px; margin:10px auto 4px; }
   .dir-lbl { text-align:center; font-size:11px; color:rgba(255,255,255,0.2); letter-spacing:.04em; }
   .seat-panel { border:0.5px solid rgba(255,255,255,0.12); border-radius:12px; padding:1rem 1.25rem; background:rgba(255,255,255,0.04); margin-top:1rem; }
@@ -203,22 +205,67 @@ function renderRecentLog(){
 /* ══ TAB 2 — Seating ══ */
 function sk(s,r,c){ return s+'-'+r+'-'+c; }
 
+function calcSeatSize(){
+  // 전체 열 수: 좌(3) + 통로 + 중(7) + 통로 + 우(3) = 13열 + 통로 2개
+  const totalCols = HALL_SECTIONS.reduce((s,sec)=>s+sec.cols, 0);
+  const numAisles = HALL_SECTIONS.length - 1;
+  const wrap = document.getElementById('hall-wrap') || document.querySelector('.hall-wrap') || document.getElementById('hall');
+  const availW = Math.min((wrap ? wrap.clientWidth : window.innerWidth) - 16, window.innerWidth - 48);
+  // 좌석크기: (가용폭 - 통로폭합) / 총열수
+  // 최소 28, 최대 46
+  const aisleW = Math.max(6, Math.floor(availW * 0.02));
+  const raw = Math.floor((availW - aisleW * numAisles - (totalCols + numAisles - 1) * 2) / totalCols);
+  const sz = Math.min(46, Math.max(28, raw));
+  const gap = Math.max(2, Math.floor(sz * 0.06));
+  const aisleTotal = Math.max(8, Math.floor(sz * 0.25));
+  const fontSize = Math.max(7, Math.floor(sz * 0.21));
+  const subFont = Math.max(6, Math.floor(sz * 0.17));
+  const lblFont = Math.max(9, Math.floor(sz * 0.22));
+  return { sz, gap, aisleTotal, fontSize, subFont, lblFont };
+}
+
 function buildHall(){
   const hall=document.getElementById('hall');
   hall.innerHTML='';
+  const { sz, gap, aisleTotal, fontSize, subFont, lblFont } = calcSeatSize();
+  hall.style.gap = gap+'px';
+  // 항상 중앙 정렬: 좌석 전체 너비 계산 후 wrap 안에서 center
+  const totalCols = HALL_SECTIONS.reduce((s,sec)=>s+sec.cols,0);
+  const numAisles = HALL_SECTIONS.length-1;
+  const totalW = totalCols*sz + (totalCols-1)*gap + numAisles*aisleTotal;
+  const wrap = document.getElementById('hall-wrap');
+  if(wrap){
+    // hall을 center-div로 감싸서 항상 가운데
+    wrap.style.display='flex';
+    wrap.style.justifyContent='center';
+  }
+
   HALL_SECTIONS.forEach((sec,si)=>{
-    if(si>0){ const a=document.createElement('div'); a.className='aisle-gap'; hall.appendChild(a); }
+    if(si>0){
+      const a=document.createElement('div');
+      a.className='aisle-gap';
+      a.style.width=aisleTotal+'px';
+      hall.appendChild(a);
+    }
     const wrap=document.createElement('div'); wrap.className='hall-sec';
+    wrap.style.gap=gap+'px';
     const lbl=document.createElement('div'); lbl.className='sec-lbl';
-    lbl.textContent=sec.label+' ('+sec.cols+'×'+sec.rows+')';
+    lbl.style.fontSize=lblFont+'px';
+    lbl.style.marginBottom=gap+'px';
+    lbl.textContent=sec.label;
     wrap.appendChild(lbl);
     for(let r=0;r<sec.rows;r++){
       const row=document.createElement('div'); row.className='hall-row';
+      row.style.gap=gap+'px';
       for(let c=0;c<sec.cols;c++){
         const key=sk(sec.id,r,c);
         const el=document.createElement('div');
         el.className='hseat'; el.id='hs-'+key;
+        el.style.width=sz+'px';
+        el.style.height=Math.floor(sz*0.88)+'px';
         el.onclick=()=>openSeatPanel(key,sec.label,r+1,c+1);
+        // store size for renderOneSeat
+        el.dataset.fs=fontSize; el.dataset.sf=subFont; el.dataset.se=Math.floor(sz*0.4);
         renderOneSeat(el,key);
         row.appendChild(el);
       }
@@ -227,19 +274,39 @@ function buildHall(){
     hall.appendChild(wrap);
   });
   updateSeatSummary();
+  // 연단 너비를 hall과 동일하게
+  setTimeout(()=>{
+    const h=document.getElementById('hall');
+    const sb=document.getElementById('stage-bar');
+    if(h&&sb){ sb.style.width=h.offsetWidth+'px'; sb.style.maxWidth='none'; }
+  }, 50);
 }
+
+// rebuild on resize
+let _resizeTimer;
+window.addEventListener('resize', ()=>{ clearTimeout(_resizeTimer); _resizeTimer=setTimeout(buildHall,150); });
 
 function renderOneSeat(el,key){
   const d=seatData[key];
+  const fs=el.dataset.fs||9;
+  const sf=el.dataset.sf||7;
+  const se=el.dataset.se||14;
+  const isActive=el.id==='hs-'+activeId;
   el.innerHTML='';
   if(d){
-    el.className='hseat '+(d.type==='zoom'?'occ-zm':'occ-off')+(el.id==='hs-'+activeId?' active-sel':'');
-    const n=document.createElement('div'); n.className='sn'; n.textContent=d.name;
-    const t=document.createElement('div'); t.className='st'; t.textContent=d.type==='zoom'?'줌':'오프';
+    el.className='hseat '+(d.type==='zoom'?'occ-zm':'occ-off')+(isActive?' active-sel':'');
+    const n=document.createElement('div'); n.className='sn';
+    n.style.fontSize=fs+'px'; n.style.maxWidth=(parseInt(el.style.width||42)-4)+'px';
+    n.textContent=d.name;
+    const t=document.createElement('div'); t.className='st';
+    t.style.fontSize=sf+'px';
+    t.textContent=d.type==='zoom'?'줌':'오프';
     el.appendChild(n); el.appendChild(t);
   } else {
-    el.className='hseat'+(el.id==='hs-'+activeId?' active-sel':'');
-    const e=document.createElement('div'); e.className='se'; e.textContent='+';
+    el.className='hseat'+(isActive?' active-sel':'');
+    const e=document.createElement('div'); e.className='se';
+    e.style.fontSize=se+'px';
+    e.textContent='+';
     el.appendChild(e);
   }
 }
@@ -519,13 +586,15 @@ document.addEventListener('DOMContentLoaded',()=>{
         </div>
       </div>
 
-      <!-- Hall — 연단에서 바라보는 방향(행 1이 연단 쪽) -->
-      <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;">
-        <div class="hall" id="hall" style="min-width:max-content;padding:4px 8px 12px;"></div>
+      <!-- Hall — 화면 비율에 따라 자동 크기 조정 -->
+      <div class="hall-wrap" id="hall-wrap">
+        <div class="hall" id="hall"></div>
       </div>
 
-      <!-- 연단 — 아래 -->
-      <div class="stage-bar">— 연단 (강단) —</div>
+      <!-- 연단 — 아래, hall과 동일 너비 -->
+      <div style="display:flex;justify-content:center;">
+        <div id="stage-bar" class="stage-bar" style="width:100%;max-width:100%">— 연단 (강단) —</div>
+      </div>
       <div class="dir-lbl">↑ 연단에서 청중을 바라보는 방향</div>
 
       <div class="seat-summary" id="seat-summary"></div>
