@@ -546,7 +546,10 @@ function renderAttHistory(){
     return `<div class="glass rounded-lg mb-2 overflow-hidden">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer" onclick="document.getElementById('ah-${i}').classList.toggle('open')">
         <span style="font-size:13px">${log.date}</span>
-        <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">${log.attendees.length}명</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">${log.attendees.length}명</span>
+          <button onclick="event.stopPropagation();deleteAttLog(${i})" style="font-size:11px;padding:2px 8px;border-radius:5px;border:0.5px solid rgba(216,90,48,0.4);background:rgba(216,90,48,0.1);color:#F0997B;cursor:pointer">삭제</button>
+        </div>
       </div>
       <div class="history-body" id="ah-${i}" style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07);font-size:12px;color:rgba(255,255,255,0.5);line-height:1.8">
         ${off.length?`<div><span style="color:#AFA9EC">● 오프라인</span> — ${off.join(', ')}</div>`:''}
@@ -563,13 +566,18 @@ function renderTeamHistory(){
     return `<div class="glass rounded-lg mb-2 overflow-hidden">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer" onclick="document.getElementById('th-${i}').classList.toggle('open')">
         <span style="font-size:13px">${log.date}</span>
-        <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">${log.teams.length}팀 · ${total}명</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">${log.teams.length}팀 · ${total}명</span>
+          <button onclick="event.stopPropagation();deleteTeamLog(${i})" style="font-size:11px;padding:2px 8px;border-radius:5px;border:0.5px solid rgba(216,90,48,0.4);background:rgba(216,90,48,0.1);color:#F0997B;cursor:pointer">삭제</button>
+        </div>
       </div>
       <div class="history-body" id="th-${i}" style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07)">${th}</div></div>`;
   }).join('');
 }
 function clearAttLog(){ if(!attLog.length) return; if(!confirm('참석 기록을 모두 삭제할까요?')) return; attLog=[]; saveLS('mg_att_log',attLog); renderRecentLog(); renderAttHistory(); showToast('삭제되었습니다'); }
 function clearTeamLog(){ if(!teamLog.length) return; if(!confirm('팀 빌딩 기록을 모두 삭제할까요?')) return; teamLog=[]; saveLS('mg_team_log',teamLog); renderTeamHistory(); showToast('삭제되었습니다'); }
+function deleteAttLog(i){ if(!confirm(attLog[i].date+' 기록을 삭제할까요?')) return; attLog.splice(i,1); saveLS('mg_att_log',attLog); renderRecentLog(); renderAttHistory(); showToast('삭제되었습니다'); }
+function deleteTeamLog(i){ if(!confirm(teamLog[i].date+' 기록을 삭제할까요?')) return; teamLog.splice(i,1); saveLS('mg_team_log',teamLog); renderTeamHistory(); showToast('삭제되었습니다'); }
 
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 
