@@ -298,28 +298,36 @@ function buildHall(){
     const h=document.getElementById('hall');
     const sb=document.getElementById('stage-bar');
     if(h&&sb){ sb.style.width=h.offsetWidth+'px'; sb.style.maxWidth='none'; }
-    // 별실/음향조정석/수유실을 메인 홀의 좌측·우측 구역 바로 뒤(같은 x축)로 정렬
-    const secs = document.querySelectorAll('#hall .hall-sec');
-    const leftSec = secs[0];
-    const rightSec = secs[secs.length-1];
+    // 별실/음향조정석/수유실을 메인 홀의 좌측·우측 구역과 같은 x축으로 정렬
+    // (getBoundingClientRect는 좁은 화면에서 메인 홀 내용이 흘러넘쳐
+    //  중앙정렬이 화면 밖으로 잘릴 때 좌표가 어긋나므로, 렌더링에 쓴
+    //  값(sz/gap 등)으로 직접 계산해 항상 정확한 위치를 구한다)
     const hallWrapEl = document.getElementById('hall-wrap');
     const hall2Wrap = document.getElementById('hall2-wrap');
     const hall3Wrap = document.getElementById('hall3-wrap');
     const hall4Wrap = document.getElementById('hall4-wrap');
-    if(leftSec && hallWrapEl && hall2Wrap){
-      const offset = leftSec.getBoundingClientRect().left - hallWrapEl.getBoundingClientRect().left;
-      hall2Wrap.style.justifyContent='flex-start';
-      hall2Wrap.style.paddingLeft=Math.max(0,offset)+'px';
-    }
-    if(rightSec && hallWrapEl && hall3Wrap){
-      const offset = rightSec.getBoundingClientRect().left - hallWrapEl.getBoundingClientRect().left;
-      hall3Wrap.style.justifyContent='flex-start';
-      hall3Wrap.style.paddingLeft=Math.max(0,offset)+'px';
-    }
-    if(rightSec && hallWrapEl && hall4Wrap){
-      const offset = rightSec.getBoundingClientRect().left - hallWrapEl.getBoundingClientRect().left;
-      hall4Wrap.style.justifyContent='flex-start';
-      hall4Wrap.style.paddingLeft=Math.max(0,offset)+'px';
+    if(hallWrapEl){
+      const { sz, gap, aisleTotal } = calcSeatSize(HALL_SECTIONS, 'hall-wrap');
+      const firstSec = HALL_SECTIONS[0];
+      const lastSec = HALL_SECTIONS[HALL_SECTIONS.length-1];
+      const totalCols = HALL_SECTIONS.reduce((s,sec)=>s+sec.cols,0);
+      const numAisles = HALL_SECTIONS.length-1;
+      const totalHallWidth = totalCols*sz + (totalCols-1)*gap + numAisles*aisleTotal;
+      const centerOffset = Math.max(0, (hallWrapEl.clientWidth - totalHallWidth) / 2);
+      const lastSecWidth = lastSec.cols*sz + (lastSec.cols-1)*gap;
+      const rightSecOffset = centerOffset + (totalHallWidth - lastSecWidth);
+      if(hall2Wrap){
+        hall2Wrap.style.justifyContent='flex-start';
+        hall2Wrap.style.paddingLeft=centerOffset+'px';
+      }
+      if(hall3Wrap){
+        hall3Wrap.style.justifyContent='flex-start';
+        hall3Wrap.style.paddingLeft=rightSecOffset+'px';
+      }
+      if(hall4Wrap){
+        hall4Wrap.style.justifyContent='flex-start';
+        hall4Wrap.style.paddingLeft=rightSecOffset+'px';
+      }
     }
   }, 50);
 }
