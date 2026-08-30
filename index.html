@@ -635,14 +635,14 @@ document.addEventListener('DOMContentLoaded',()=>{
         </div>
       </div>
 
-      <!-- 좌측 뒤편 별실 — 연단(앞쪽)의 반대인 뒤쪽, 좌측 좌석 바로 뒤에 위치 -->
-      <div class="hall-wrap" id="hall2-wrap" style="margin-bottom:22px">
-        <div class="hall" id="hall2"></div>
-      </div>
-
-      <!-- 음향조정석 뒤편 수유실 — 음향조정석보다 한 단계 더 뒤쪽 -->
-      <div class="hall-wrap" id="hall4-wrap" style="margin-bottom:22px">
-        <div class="hall" id="hall4"></div>
+      <!-- 별실(좌측 뒤편)·수유실(우측 뒤편) — 같은 높이로 좌우 배치 -->
+      <div style="display:grid;margin-bottom:22px">
+        <div class="hall-wrap" id="hall2-wrap" style="grid-area:1/1">
+          <div class="hall" id="hall2"></div>
+        </div>
+        <div class="hall-wrap" id="hall4-wrap" style="grid-area:1/1">
+          <div class="hall" id="hall4"></div>
+        </div>
       </div>
 
       <!-- 우측 뒤편 음향조정석 — 뒤쪽, 우측 좌석 바로 뒤에 위치 -->
