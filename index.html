@@ -102,6 +102,11 @@ const HALL_SECTIONS = [
   { id:'R', label:'우측', cols:4, rows:8 },
 ];
 
+// 좌측 뒤편 별실 — 메인 홀과 별도의 방
+const EXTRA_SECTIONS = [
+  { id:'X', label:'별실 (좌측 뒤편)', cols:8, rows:6 },
+];
+
 const TEAM_COLORS = [
   { bg:'rgba(127,119,221,0.12)', border:'rgba(127,119,221,0.4)', text:'#AFA9EC', dot:'#7F77DD' },
   { bg:'rgba(29,158,117,0.12)',  border:'rgba(29,158,117,0.4)',  text:'#5DCAA5', dot:'#1D9E75' },
@@ -205,11 +210,11 @@ function renderRecentLog(){
 /* ══ TAB 2 — Seating ══ */
 function sk(s,r,c){ return s+'-'+r+'-'+c; }
 
-function calcSeatSize(){
-  // 전체 열 수: 좌(3) + 통로 + 중(7) + 통로 + 우(3) = 13열 + 통로 2개
-  const totalCols = HALL_SECTIONS.reduce((s,sec)=>s+sec.cols, 0);
-  const numAisles = HALL_SECTIONS.length - 1;
-  const wrap = document.getElementById('hall-wrap') || document.querySelector('.hall-wrap') || document.getElementById('hall');
+function calcSeatSize(sections, wrapId){
+  // 전체 열 수: 각 구역 열수 합 + 구역 사이 통로
+  const totalCols = sections.reduce((s,sec)=>s+sec.cols, 0);
+  const numAisles = sections.length - 1;
+  const wrap = document.getElementById(wrapId) || document.getElementById('hall');
   const availW = Math.min((wrap ? wrap.clientWidth : window.innerWidth) - 16, window.innerWidth - 48);
   // 좌석크기: (가용폭 - 통로폭합) / 총열수
   // 최소 28, 최대 46
@@ -224,36 +229,33 @@ function calcSeatSize(){
   return { sz, gap, aisleTotal, fontSize, subFont, lblFont };
 }
 
-function buildHall(){
-  const hall=document.getElementById('hall');
+function buildHallInto(hallId, wrapId, sections){
+  const hall=document.getElementById(hallId);
+  if(!hall) return;
   hall.innerHTML='';
-  const { sz, gap, aisleTotal, fontSize, subFont, lblFont } = calcSeatSize();
+  const { sz, gap, aisleTotal, fontSize, subFont, lblFont } = calcSeatSize(sections, wrapId);
   hall.style.gap = gap+'px';
-  // 항상 중앙 정렬: 좌석 전체 너비 계산 후 wrap 안에서 center
-  const totalCols = HALL_SECTIONS.reduce((s,sec)=>s+sec.cols,0);
-  const numAisles = HALL_SECTIONS.length-1;
-  const totalW = totalCols*sz + (totalCols-1)*gap + numAisles*aisleTotal;
-  const wrap = document.getElementById('hall-wrap');
+  const wrap = document.getElementById(wrapId);
   if(wrap){
     // hall을 center-div로 감싸서 항상 가운데
     wrap.style.display='flex';
     wrap.style.justifyContent='center';
   }
 
-  HALL_SECTIONS.forEach((sec,si)=>{
+  sections.forEach((sec,si)=>{
     if(si>0){
       const a=document.createElement('div');
       a.className='aisle-gap';
       a.style.width=aisleTotal+'px';
       hall.appendChild(a);
     }
-    const wrap=document.createElement('div'); wrap.className='hall-sec';
-    wrap.style.gap=gap+'px';
+    const secWrap=document.createElement('div'); secWrap.className='hall-sec';
+    secWrap.style.gap=gap+'px';
     const lbl=document.createElement('div'); lbl.className='sec-lbl';
     lbl.style.fontSize=lblFont+'px';
     lbl.style.marginBottom=gap+'px';
     lbl.textContent=sec.label;
-    wrap.appendChild(lbl);
+    secWrap.appendChild(lbl);
     for(let r=0;r<sec.rows;r++){
       const row=document.createElement('div'); row.className='hall-row';
       row.style.gap=gap+'px';
@@ -269,10 +271,15 @@ function buildHall(){
         renderOneSeat(el,key);
         row.appendChild(el);
       }
-      wrap.appendChild(row);
+      secWrap.appendChild(row);
     }
-    hall.appendChild(wrap);
+    hall.appendChild(secWrap);
   });
+}
+
+function buildHall(){
+  buildHallInto('hall','hall-wrap',HALL_SECTIONS);
+  buildHallInto('hall2','hall2-wrap',EXTRA_SECTIONS);
   updateSeatSummary();
   // 연단 너비를 hall과 동일하게
   setTimeout(()=>{
@@ -603,6 +610,11 @@ document.addEventListener('DOMContentLoaded',()=>{
         <div id="stage-bar" class="stage-bar" style="width:100%;max-width:100%">— 연단 (강단) —</div>
       </div>
       <div class="dir-lbl">↑ 연단에서 청중을 바라보는 방향</div>
+
+      <!-- 좌측 뒤편 별실 — 메인 홀과 별도의 방 -->
+      <div class="hall-wrap" id="hall2-wrap" style="margin-top:22px">
+        <div class="hall" id="hall2"></div>
+      </div>
 
       <div class="seat-summary" id="seat-summary"></div>
     </div>
