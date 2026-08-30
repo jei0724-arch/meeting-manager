@@ -69,6 +69,36 @@
   .ss { font-size:11px; padding:3px 10px; border-radius:6px; }
   .ss.off { background:rgba(127,119,221,0.15); color:#AFA9EC; }
   .ss.zm  { background:rgba(186,117,23,0.15);  color:#FAC775; }
+
+  /* ── Stats tab ── */
+  .stat-tile { padding:14px 16px; }
+  .stat-tile .stat-label { font-size:11px; color:rgba(255,255,255,0.4); margin-bottom:6px; }
+  .stat-tile .stat-value { font-size:22px; font-weight:600; color:#e8e8e6; }
+  .stat-tile .stat-sub { font-size:11px; color:rgba(255,255,255,0.35); margin-top:4px; }
+  .legend-row { display:flex; gap:14px; align-items:center; margin-bottom:14px; }
+  .legend-item { display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(255,255,255,0.5); }
+  .legend-swatch { width:9px; height:9px; border-radius:2px; flex-shrink:0; }
+  .trend-chart { display:flex; align-items:flex-end; gap:4px; height:160px; overflow-x:auto; padding-bottom:4px; -webkit-overflow-scrolling:touch; }
+  .trend-col { display:flex; flex-direction:column; align-items:center; flex-shrink:0; width:26px; height:100%; justify-content:flex-end; }
+  .trend-bar-wrap { display:flex; flex-direction:column-reverse; width:20px; cursor:pointer; }
+  .trend-seg { width:100%; }
+  .trend-seg.off { background:#7F77DD; }
+  .trend-seg.zm  { background:#BA7517; }
+  .trend-seg:first-child { border-radius:0 0 3px 3px; }
+  .trend-seg:last-child { border-radius:3px 3px 0 0; }
+  .trend-col-label { font-size:9px; color:rgba(255,255,255,0.3); margin-top:6px; white-space:nowrap; transform:rotate(-40deg); transform-origin:top center; }
+  .rank-row { display:flex; align-items:center; gap:8px; padding:5px 0; }
+  .rank-name { font-size:12px; color:rgba(255,255,255,0.6); width:64px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rank-bar-track { flex:1; height:14px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; }
+  .rank-bar-fill { height:100%; background:rgba(232,232,230,0.55); border-radius:3px; }
+  .rank-count { font-size:11px; color:rgba(255,255,255,0.45); width:32px; text-align:right; flex-shrink:0; font-variant-numeric:tabular-nums; }
+  .chart-tooltip { position:fixed; z-index:10000; padding:7px 10px; border-radius:7px; background:#1c1c1c; border:0.5px solid rgba(255,255,255,0.15); font-size:11px; color:#e8e8e6; pointer-events:none; opacity:0; transition:opacity .1s; white-space:nowrap; }
+  .chart-tooltip.show { opacity:1; }
+  .chart-tooltip .ct-title { color:rgba(255,255,255,0.45); margin-bottom:3px; }
+  .chart-tooltip .ct-row { display:flex; align-items:center; gap:5px; }
+  .chart-tooltip .ct-key { width:8px; height:2px; border-radius:1px; flex-shrink:0; }
+  .stats-table-row { display:flex; gap:10px; padding:5px 0; font-size:12px; border-bottom:0.5px solid rgba(255,255,255,0.06); color:rgba(255,255,255,0.5); }
+  .stats-table-row span { flex:1; }
 </style>
 </head>
 <body>
@@ -134,6 +164,12 @@ let attLog    = loadLS('mg_att_log', []);
 let teamLog   = loadLS('mg_team_log', []);
 let seatData  = loadLS('mg_seats', {});
 let currentTeams = null;
+let MEMBERS = loadLS('mg_members', DEFAULT_MEMBERS.slice());
+let editingMemberIndex = null;
+let editingAttLogIndex = null;
+let editingAttAttendance = {};
+let editingTeamLogIndex = null;
+let editingTeams = null;
 
 /* ── Seating state ── */
 let activeId = null;
@@ -147,6 +183,7 @@ function switchTab(name){
   document.getElementById('pp-'+name).style.display='block';
   if(name==='team')    updateTeamInfo();
   if(name==='seating') buildHall();
+  if(name==='stats')   renderStats();
 }
 
 /* ══ TAB 1 — Attendance ══ */
@@ -165,11 +202,11 @@ function toggleMember(name){
   else appState.attendance[name]=appState.mode;
   renderMemberList(); updateAttSummary();
 }
-function selectAll(){ DEFAULT_MEMBERS.forEach(n=>{ appState.attendance[n]=appState.mode; }); renderMemberList(); updateAttSummary(); }
+function selectAll(){ MEMBERS.forEach(n=>{ appState.attendance[n]=appState.mode; }); renderMemberList(); updateAttSummary(); }
 function clearAll() { appState.attendance={}; renderMemberList(); updateAttSummary(); }
 function renderMemberList(){
   const el=document.getElementById('member-list');
-  el.innerHTML=DEFAULT_MEMBERS.map(name=>{
+  el.innerHTML=MEMBERS.map(name=>{
     const att=appState.attendance[name];
     let cls='flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm glass glass-hover';
     if(att==='offline') cls+=' member-checked-off';
@@ -182,6 +219,85 @@ function renderMemberList(){
     </div>`;
   }).join('');
   document.getElementById('att-count').textContent=Object.keys(appState.attendance).length+'명';
+}
+
+/* ── 명단 관리: 추가/수정/삭제 ── */
+function saveMembers(){ saveLS('mg_members', MEMBERS); }
+
+function toggleMemberManager(){
+  const el=document.getElementById('member-manager');
+  const show=el.style.display==='none';
+  el.style.display=show?'block':'none';
+  if(show){ editingMemberIndex=null; renderMemberManageList(); }
+}
+
+function addMember(){
+  const input=document.getElementById('new-member-input');
+  const name=input.value.trim();
+  if(!name) return;
+  if(MEMBERS.includes(name)){ showToast('이미 있는 이름입니다'); return; }
+  MEMBERS.push(name);
+  MEMBERS.sort((a,b)=>a.localeCompare(b,'ko'));
+  saveMembers();
+  input.value='';
+  renderMemberManageList(); renderMemberList(); buildQChips();
+  showToast('✓ 추가되었습니다');
+}
+
+function renderMemberManageList(){
+  const el=document.getElementById('member-manage-list');
+  if(!el) return;
+  el.innerHTML=MEMBERS.map((name,i)=>{
+    if(i===editingMemberIndex){
+      return `<div class="manual-row">
+        <input id="edit-member-input" type="text" value="${name}" onkeydown="if(event.key==='Enter')saveEditMember(${i});if(event.key==='Escape')cancelEditMember()">
+        <button onclick="saveEditMember(${i})" class="btn-sm">저장</button>
+        <button onclick="cancelEditMember()" class="btn-sm">취소</button>
+      </div>`;
+    }
+    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px" class="glass-hover">
+      <span style="flex:1;font-size:13px">${name}</span>
+      <button onclick="startEditMember(${i})" class="btn-sm" style="padding:3px 8px;font-size:11px">수정</button>
+      <button onclick="removeMember(${i})" class="btn-sm danger" style="padding:3px 8px;font-size:11px">삭제</button>
+    </div>`;
+  }).join('');
+  if(editingMemberIndex!==null) document.getElementById('edit-member-input')?.focus();
+}
+
+function startEditMember(i){ editingMemberIndex=i; renderMemberManageList(); }
+function cancelEditMember(){ editingMemberIndex=null; renderMemberManageList(); }
+
+function saveEditMember(i){
+  const input=document.getElementById('edit-member-input');
+  const newName=input.value.trim();
+  if(!newName){ showToast('이름을 입력해주세요'); return; }
+  const oldName=MEMBERS[i];
+  if(newName!==oldName && MEMBERS.includes(newName)){ showToast('이미 있는 이름입니다'); return; }
+  MEMBERS[i]=newName;
+  MEMBERS.sort((a,b)=>a.localeCompare(b,'ko'));
+  saveMembers();
+  if(newName!==oldName){
+    if(appState.attendance[oldName]!==undefined){ appState.attendance[newName]=appState.attendance[oldName]; delete appState.attendance[oldName]; }
+    let seatsChanged=false;
+    Object.keys(seatData).forEach(k=>{ if(seatData[k].name===oldName){ seatData[k].name=newName; seatsChanged=true; } });
+    if(seatsChanged) saveLS('mg_seats', seatData);
+  }
+  editingMemberIndex=null;
+  renderMemberManageList(); renderMemberList(); updateAttSummary(); buildQChips(); buildHall();
+  showToast('✓ 수정되었습니다');
+}
+
+function removeMember(i){
+  const name=MEMBERS[i];
+  if(!confirm(name+'님을 명단에서 삭제할까요?')) return;
+  MEMBERS.splice(i,1);
+  saveMembers();
+  delete appState.attendance[name];
+  let seatsChanged=false;
+  Object.keys(seatData).forEach(k=>{ if(seatData[k].name===name){ delete seatData[k]; seatsChanged=true; } });
+  if(seatsChanged) saveLS('mg_seats', seatData);
+  renderMemberManageList(); renderMemberList(); updateAttSummary(); buildQChips(); buildHall();
+  showToast('삭제되었습니다');
 }
 function updateAttSummary(){
   const vals=Object.values(appState.attendance);
@@ -397,7 +513,7 @@ function buildQChips(){
   const used=new Set(Object.entries(seatData).filter(([k])=>k!==activeId).map(([,v])=>v.name));
   const el=document.getElementById('qchips');
   el.innerHTML='';
-  DEFAULT_MEMBERS.forEach(name=>{
+  MEMBERS.forEach(name=>{
     const chip=document.createElement('div');
     const hcls=curType==='zoom'?'zm-h':'off-h';
     chip.className='qchip '+hcls+(used.has(name)?' used':'');
@@ -541,6 +657,25 @@ function renderAttHistory(){
   const el=document.getElementById('att-hist-list');
   if(!attLog.length){ el.innerHTML='<div style="text-align:center;padding:2rem;font-size:12px;color:rgba(255,255,255,0.3)">기록 없음</div>'; return; }
   el.innerHTML=attLog.map((log,i)=>{
+    if(i===editingAttLogIndex){
+      const grid=MEMBERS.map(name=>{
+        const st=editingAttAttendance[name];
+        const style=st==='zoom' ? 'background:rgba(186,117,23,0.2);border-color:rgba(186,117,23,0.5);color:#FAC775'
+                  : st==='offline' ? 'background:rgba(127,119,221,0.2);border-color:rgba(127,119,221,0.5);color:#AFA9EC'
+                  : 'border-color:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5)';
+        return `<div onclick="toggleEditAttMember('${name}')" style="cursor:pointer;padding:5px 8px;border-radius:6px;border:0.5px solid;font-size:12px;text-align:center;${style}">${name}</div>`;
+      }).join('');
+      return `<div class="glass rounded-lg mb-2 overflow-hidden">
+        <div style="padding:10px 14px;font-size:13px;font-weight:500">${log.date} <span style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:400">— 수정 중 (클릭: 미참석→오프라인→줌)</span></div>
+        <div style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07)">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:5px;max-height:260px;overflow-y:auto;margin-bottom:10px">${grid}</div>
+          <div style="display:flex;gap:6px">
+            <button onclick="saveEditAttLog(${i})" class="btn-sm">저장</button>
+            <button onclick="cancelEditAttLog()" class="btn-sm">취소</button>
+          </div>
+        </div>
+      </div>`;
+    }
     const off=log.attendees.filter(([,t])=>t==='offline').map(([n])=>n);
     const zm=log.attendees.filter(([,t])=>t==='zoom').map(([n])=>n);
     return `<div class="glass rounded-lg mb-2 overflow-hidden">
@@ -548,6 +683,7 @@ function renderAttHistory(){
         <span style="font-size:13px">${log.date}</span>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">${log.attendees.length}명</span>
+          <button onclick="event.stopPropagation();startEditAttLog(${i})" class="btn-sm" style="font-size:11px;padding:2px 8px">수정</button>
           <button onclick="event.stopPropagation();deleteAttLog(${i})" style="font-size:11px;padding:2px 8px;border-radius:5px;border:0.5px solid rgba(216,90,48,0.4);background:rgba(216,90,48,0.1);color:#F0997B;cursor:pointer">삭제</button>
         </div>
       </div>
@@ -557,10 +693,42 @@ function renderAttHistory(){
       </div></div>`;
   }).join('');
 }
+function startEditAttLog(i){
+  editingAttLogIndex=i;
+  editingAttAttendance={};
+  attLog[i].attendees.forEach(([n,t])=>{ editingAttAttendance[n]=t; });
+  renderAttHistory();
+  document.getElementById('ah-'+i)?.classList.add('open');
+}
+function toggleEditAttMember(name){
+  const cur=editingAttAttendance[name];
+  if(!cur) editingAttAttendance[name]='offline';
+  else if(cur==='offline') editingAttAttendance[name]='zoom';
+  else delete editingAttAttendance[name];
+  renderAttHistory();
+  document.getElementById('ah-'+editingAttLogIndex)?.classList.add('open');
+}
+function saveEditAttLog(i){
+  const attendees=Object.entries(editingAttAttendance);
+  if(!attendees.length){ showToast('참석자를 선택해주세요'); return; }
+  attLog[i].attendees=attendees;
+  saveLS('mg_att_log',attLog);
+  editingAttLogIndex=null; editingAttAttendance={};
+  renderAttHistory(); renderRecentLog();
+  showToast('✓ 수정되었습니다');
+}
+function cancelEditAttLog(){ editingAttLogIndex=null; editingAttAttendance={}; renderAttHistory(); }
+
 function renderTeamHistory(){
   const el=document.getElementById('team-hist-list');
   if(!teamLog.length){ el.innerHTML='<div style="text-align:center;padding:2rem;font-size:12px;color:rgba(255,255,255,0.3)">기록 없음</div>'; return; }
   el.innerHTML=teamLog.map((log,i)=>{
+    if(i===editingTeamLogIndex){
+      return `<div class="glass rounded-lg mb-2 overflow-hidden">
+        <div style="padding:10px 14px;font-size:13px;font-weight:500">${log.date} <span style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:400">— 수정 중</span></div>
+        <div style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07)">${renderTeamEditBody(i)}</div>
+      </div>`;
+    }
     const total=log.teams.reduce((s,t)=>s+t.length,0);
     const th=log.teams.map((team,ti)=>{ const c=TEAM_COLORS[ti%TEAM_COLORS.length]; return `<div style="margin-bottom:4px"><span style="color:${c.text};font-size:11px">팀 ${ti+1}</span> <span style="color:rgba(255,255,255,0.45);font-size:12px">— ${team.join(', ')}</span></div>`; }).join('');
     return `<div class="glass rounded-lg mb-2 overflow-hidden">
@@ -568,16 +736,190 @@ function renderTeamHistory(){
         <span style="font-size:13px">${log.date}</span>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">${log.teams.length}팀 · ${total}명</span>
+          <button onclick="event.stopPropagation();startEditTeamLog(${i})" class="btn-sm" style="font-size:11px;padding:2px 8px">수정</button>
           <button onclick="event.stopPropagation();deleteTeamLog(${i})" style="font-size:11px;padding:2px 8px;border-radius:5px;border:0.5px solid rgba(216,90,48,0.4);background:rgba(216,90,48,0.1);color:#F0997B;cursor:pointer">삭제</button>
         </div>
       </div>
       <div class="history-body" id="th-${i}" style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07)">${th}</div></div>`;
   }).join('');
 }
+function startEditTeamLog(i){
+  editingTeamLogIndex=i;
+  editingTeams=teamLog[i].teams.map(t=>t.slice());
+  renderTeamHistory();
+  document.getElementById('th-'+i)?.classList.add('open');
+}
+function renderTeamEditBody(i){
+  const teamsHtml=editingTeams.map((team,ti)=>{
+    const c=TEAM_COLORS[ti%TEAM_COLORS.length];
+    const rows=team.map((name,mi)=>{
+      const options=editingTeams.map((_,tj)=>`<option value="${tj}"${tj===ti?' selected':''}>팀 ${tj+1}</option>`).join('');
+      return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+        <span style="flex:1;font-size:12px;color:rgba(255,255,255,0.6)">${name}</span>
+        <select onchange="moveEditMember(${ti},${mi},this.value)" style="font-size:11px;padding:2px 6px">${options}</select>
+        <button onclick="removeEditMember(${ti},${mi})" class="btn-sm danger" style="padding:2px 6px;font-size:11px">✕</button>
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:10px;padding:8px;border-radius:8px;border:0.5px solid ${c.border}">
+      <div style="color:${c.text};font-size:11px;font-weight:500;margin-bottom:4px">팀 ${ti+1} <span style="font-weight:400;opacity:.7">${team.length}명</span></div>
+      ${rows||'<div style="font-size:11px;color:rgba(255,255,255,0.3)">비어 있음</div>'}
+    </div>`;
+  }).join('');
+  return `${teamsHtml}
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button onclick="saveEditTeamLog(${i})" class="btn-sm">저장</button>
+      <button onclick="cancelEditTeamLog()" class="btn-sm">취소</button>
+    </div>`;
+}
+function moveEditMember(ti,mi,targetTiStr){
+  const targetTi=parseInt(targetTiStr,10);
+  if(targetTi===ti) return;
+  const [name]=editingTeams[ti].splice(mi,1);
+  editingTeams[targetTi].push(name);
+  renderTeamHistory();
+  document.getElementById('th-'+editingTeamLogIndex)?.classList.add('open');
+}
+function removeEditMember(ti,mi){
+  editingTeams[ti].splice(mi,1);
+  renderTeamHistory();
+  document.getElementById('th-'+editingTeamLogIndex)?.classList.add('open');
+}
+function saveEditTeamLog(i){
+  teamLog[i].teams=editingTeams.map(t=>t.slice());
+  saveLS('mg_team_log',teamLog);
+  editingTeamLogIndex=null; editingTeams=null;
+  renderTeamHistory();
+  showToast('✓ 수정되었습니다');
+}
+function cancelEditTeamLog(){ editingTeamLogIndex=null; editingTeams=null; renderTeamHistory(); }
 function clearAttLog(){ if(!attLog.length) return; if(!confirm('참석 기록을 모두 삭제할까요?')) return; attLog=[]; saveLS('mg_att_log',attLog); renderRecentLog(); renderAttHistory(); showToast('삭제되었습니다'); }
 function clearTeamLog(){ if(!teamLog.length) return; if(!confirm('팀 빌딩 기록을 모두 삭제할까요?')) return; teamLog=[]; saveLS('mg_team_log',teamLog); renderTeamHistory(); showToast('삭제되었습니다'); }
-function deleteAttLog(i){ if(!confirm(attLog[i].date+' 기록을 삭제할까요?')) return; attLog.splice(i,1); saveLS('mg_att_log',attLog); renderRecentLog(); renderAttHistory(); showToast('삭제되었습니다'); }
-function deleteTeamLog(i){ if(!confirm(teamLog[i].date+' 기록을 삭제할까요?')) return; teamLog.splice(i,1); saveLS('mg_team_log',teamLog); renderTeamHistory(); showToast('삭제되었습니다'); }
+function deleteAttLog(i){ if(!confirm(attLog[i].date+' 기록을 삭제할까요?')) return; attLog.splice(i,1); saveLS('mg_att_log',attLog); editingAttLogIndex=null; editingAttAttendance={}; renderRecentLog(); renderAttHistory(); showToast('삭제되었습니다'); }
+function deleteTeamLog(i){ if(!confirm(teamLog[i].date+' 기록을 삭제할까요?')) return; teamLog.splice(i,1); saveLS('mg_team_log',teamLog); editingTeamLogIndex=null; editingTeams=null; renderTeamHistory(); showToast('삭제되었습니다'); }
+
+/* ══ TAB 5 — Stats ══ */
+function renderStats(){
+  const empty=document.getElementById('stats-empty');
+  const content=document.getElementById('stats-content');
+  if(!attLog.length){ empty.style.display='block'; content.style.display='none'; return; }
+  empty.style.display='none'; content.style.display='block';
+
+  const chrono=attLog.slice().reverse(); // 오래된 순 → 최신 순
+
+  const countMap={};
+  chrono.forEach(log=>log.attendees.forEach(([name])=>{ countMap[name]=(countMap[name]||0)+1; }));
+  const ranking=Object.entries(countMap).sort((a,b)=>b[1]-a[1]);
+
+  const totalAttendees=chrono.reduce((s,log)=>s+log.attendees.length,0);
+  const totalOff=chrono.reduce((s,log)=>s+log.attendees.filter(([,t])=>t==='offline').length,0);
+  const totalZm=chrono.reduce((s,log)=>s+log.attendees.filter(([,t])=>t==='zoom').length,0);
+
+  document.getElementById('stat-sessions').textContent=attLog.length+'회';
+  document.getElementById('stat-avg').textContent=(totalAttendees/attLog.length).toFixed(1)+'명';
+  const offZmTotal=totalOff+totalZm;
+  const offPct=offZmTotal>0?Math.round(totalOff/offZmTotal*100):0;
+  document.getElementById('stat-ratio').textContent=offZmTotal>0?`${offPct}% : ${100-offPct}%`:'-';
+  document.getElementById('stat-top').textContent=ranking.length?ranking[0][0]:'-';
+  document.getElementById('stat-top-sub').textContent=ranking.length?`${ranking[0][1]}회 참석`:'';
+
+  renderTrendChart(chrono);
+  renderRankList(ranking);
+}
+
+function renderTrendChart(chrono){
+  const el=document.getElementById('trend-chart');
+  const maxTotal=Math.max(1, ...chrono.map(log=>log.attendees.length));
+  const maxPx=140;
+  el.innerHTML='';
+  chrono.forEach(log=>{
+    const off=log.attendees.filter(([,t])=>t==='offline').length;
+    const zm=log.attendees.filter(([,t])=>t==='zoom').length;
+    const offH=off>0?Math.max(2,Math.round(off/maxTotal*maxPx)):0;
+    const zmH=zm>0?Math.max(2,Math.round(zm/maxTotal*maxPx)):0;
+    const shortDate=log.date.split(' ')[0];
+
+    const col=document.createElement('div'); col.className='trend-col';
+    const wrap=document.createElement('div'); wrap.className='trend-bar-wrap';
+    wrap.onmouseenter=(e)=>showChartTooltip(e,shortDate,off,zm);
+    wrap.onmousemove=moveChartTooltip;
+    wrap.onmouseleave=hideChartTooltip;
+    const offSeg=document.createElement('div'); offSeg.className='trend-seg off'; offSeg.style.height=offH+'px';
+    const zmSeg=document.createElement('div'); zmSeg.className='trend-seg zm'; zmSeg.style.height=zmH+'px';
+    // 바깥쪽 끝(연단에서 가장 먼 세그먼트)만 둥글게, 기준선은 각지게
+    if(zmH>0) zmSeg.style.borderRadius='3px 3px 0 0';
+    else if(offH>0) offSeg.style.borderRadius='3px 3px 0 0';
+    wrap.append(offSeg,zmSeg);
+    const lbl=document.createElement('div'); lbl.className='trend-col-label'; lbl.textContent=shortDate;
+    col.append(wrap,lbl);
+    el.appendChild(col);
+  });
+}
+
+function renderRankList(ranking){
+  const el=document.getElementById('rank-list');
+  document.getElementById('rank-count-label').textContent=ranking.length+'명';
+  if(!ranking.length){ el.innerHTML=''; return; }
+  const max=ranking[0][1];
+  el.innerHTML='';
+  ranking.forEach(([name,count])=>{
+    const pct=Math.round(count/max*100);
+    const row=document.createElement('div'); row.className='rank-row';
+    const nameEl=document.createElement('span'); nameEl.className='rank-name'; nameEl.textContent=name;
+    const track=document.createElement('div'); track.className='rank-bar-track';
+    const fill=document.createElement('div'); fill.className='rank-bar-fill'; fill.style.width=pct+'%';
+    track.appendChild(fill);
+    const countEl=document.createElement('span'); countEl.className='rank-count'; countEl.textContent=count+'회';
+    row.append(nameEl,track,countEl);
+    el.appendChild(row);
+  });
+}
+
+function toggleStatsTable(which){
+  if(which!=='trend') return;
+  const chart=document.getElementById('trend-chart');
+  const table=document.getElementById('trend-table');
+  const show=table.style.display==='none';
+  table.style.display=show?'block':'none';
+  chart.style.display=show?'none':'flex';
+  if(show){
+    const chrono=attLog.slice().reverse();
+    table.innerHTML='';
+    chrono.forEach(log=>{
+      const off=log.attendees.filter(([,t])=>t==='offline').length;
+      const zm=log.attendees.filter(([,t])=>t==='zoom').length;
+      const row=document.createElement('div'); row.className='stats-table-row';
+      const c1=document.createElement('span'); c1.textContent=log.date;
+      const c2=document.createElement('span'); c2.textContent='오프라인 '+off;
+      const c3=document.createElement('span'); c3.textContent='줌 '+zm;
+      const c4=document.createElement('span'); c4.textContent='총 '+(off+zm)+'명';
+      row.append(c1,c2,c3,c4);
+      table.appendChild(row);
+    });
+  }
+}
+
+function showChartTooltip(evt,dateLabel,off,zm){
+  const t=document.getElementById('chart-tooltip');
+  t.innerHTML='';
+  const title=document.createElement('div'); title.className='ct-title'; title.textContent=dateLabel;
+  const row1=document.createElement('div'); row1.className='ct-row';
+  const key1=document.createElement('span'); key1.className='ct-key'; key1.style.background='#7F77DD';
+  const v1=document.createElement('strong'); v1.textContent=off;
+  row1.append(key1,v1,document.createTextNode(' 오프라인'));
+  const row2=document.createElement('div'); row2.className='ct-row';
+  const key2=document.createElement('span'); key2.className='ct-key'; key2.style.background='#BA7517';
+  const v2=document.createElement('strong'); v2.textContent=zm;
+  row2.append(key2,v2,document.createTextNode(' 줌'));
+  t.append(title,row1,row2);
+  t.classList.add('show');
+  moveChartTooltip(evt);
+}
+function moveChartTooltip(evt){
+  const t=document.getElementById('chart-tooltip');
+  t.style.left=(evt.clientX+12)+'px';
+  t.style.top=(evt.clientY+12)+'px';
+}
+function hideChartTooltip(){ document.getElementById('chart-tooltip').classList.remove('show'); }
 
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 
@@ -600,6 +942,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     <button id="tbtn-seating"    class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('seating')">② 좌석 배치</button>
     <button id="tbtn-team"       class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('team')">③ 팀 빌딩</button>
     <button id="tbtn-history"    class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('history')">④ 히스토리</button>
+    <button id="tbtn-stats"      class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('stats')">⑤ 통계</button>
   </div>
 
   <!-- ① 참석 확인 -->
@@ -614,7 +957,17 @@ document.addEventListener('DOMContentLoaded',()=>{
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
             <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">회원 명단</div>
-            <span id="att-count" style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">0명</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span id="att-count" style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">0명</span>
+              <button onclick="toggleMemberManager()" class="btn-sm" style="font-size:11px;padding:3px 10px">명단 관리</button>
+            </div>
+          </div>
+          <div id="member-manager" style="display:none;margin-bottom:12px;padding:10px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03)">
+            <div class="manual-row" style="margin-bottom:8px">
+              <input id="new-member-input" type="text" placeholder="새 회원 이름" onkeydown="if(event.key==='Enter')addMember()">
+              <button onclick="addMember()" class="btn-sm">추가</button>
+            </div>
+            <div id="member-manage-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
           </div>
           <div id="member-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:5px"></div>
           <div style="display:flex;gap:6px;margin-top:10px">
@@ -757,8 +1110,56 @@ document.addEventListener('DOMContentLoaded',()=>{
       </div>
     </div>
   </div>
+
+  <!-- ⑤ 통계 -->
+  <div id="pp-stats" class="panel-page" style="display:none">
+    <div id="stats-empty" style="display:none;text-align:center;padding:3rem;font-size:13px;color:rgba(255,255,255,0.3)">참석 기록이 없습니다. 참석 확인 탭에서 기록을 저장해주세요.</div>
+    <div id="stats-content">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;margin-bottom:1rem">
+        <div class="glass rounded-xl stat-tile">
+          <div class="stat-label">총 모임 횟수</div>
+          <div class="stat-value" id="stat-sessions">0</div>
+        </div>
+        <div class="glass rounded-xl stat-tile">
+          <div class="stat-label">회당 평균 참석 인원</div>
+          <div class="stat-value" id="stat-avg">0</div>
+        </div>
+        <div class="glass rounded-xl stat-tile">
+          <div class="stat-label">오프라인 : 줌 비율</div>
+          <div class="stat-value" id="stat-ratio" style="font-size:16px">-</div>
+        </div>
+        <div class="glass rounded-xl stat-tile">
+          <div class="stat-label">최다 참석 회원</div>
+          <div class="stat-value" id="stat-top" style="font-size:16px">-</div>
+          <div class="stat-sub" id="stat-top-sub"></div>
+        </div>
+      </div>
+
+      <div class="glass rounded-xl p-5 mb-4">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+          <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">회차별 참석 인원 추이</div>
+          <button onclick="toggleStatsTable('trend')" class="btn-sm" style="font-size:11px;padding:3px 10px">표로 보기</button>
+        </div>
+        <div class="legend-row" style="margin-top:12px">
+          <div class="legend-item"><span class="legend-swatch" style="background:#7F77DD"></span>오프라인</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#BA7517"></span>줌</div>
+        </div>
+        <div class="trend-chart" id="trend-chart"></div>
+        <div id="trend-table" style="display:none;margin-top:10px"></div>
+      </div>
+
+      <div class="glass rounded-xl p-5">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">회원별 참석 횟수 랭킹</div>
+          <span style="font-size:11px;color:rgba(255,255,255,0.3)" id="rank-count-label"></span>
+        </div>
+        <div id="rank-list" style="max-height:420px;overflow-y:auto"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
+<div class="chart-tooltip" id="chart-tooltip"></div>
 <div class="toast" id="toast"></div>
 </body>
 </html>
