@@ -112,6 +112,11 @@ const SOUND_SECTIONS = [
   { id:'S', label:'음향조정석', cols:2, rows:1 },
 ];
 
+// 음향조정석 뒤편 수유실
+const NURSING_SECTIONS = [
+  { id:'N', label:'수유실', cols:2, rows:4 },
+];
+
 const TEAM_COLORS = [
   { bg:'rgba(127,119,221,0.12)', border:'rgba(127,119,221,0.4)', text:'#AFA9EC', dot:'#7F77DD' },
   { bg:'rgba(29,158,117,0.12)',  border:'rgba(29,158,117,0.4)',  text:'#5DCAA5', dot:'#1D9E75' },
@@ -286,19 +291,21 @@ function buildHall(){
   buildHallInto('hall','hall-wrap',HALL_SECTIONS);
   buildHallInto('hall2','hall2-wrap',EXTRA_SECTIONS);
   buildHallInto('hall3','hall3-wrap',SOUND_SECTIONS);
+  buildHallInto('hall4','hall4-wrap',NURSING_SECTIONS);
   updateSeatSummary();
   // 연단 너비를 hall과 동일하게
   setTimeout(()=>{
     const h=document.getElementById('hall');
     const sb=document.getElementById('stage-bar');
     if(h&&sb){ sb.style.width=h.offsetWidth+'px'; sb.style.maxWidth='none'; }
-    // 별실/음향조정석을 메인 홀의 좌측·우측 구역 바로 뒤(같은 x축)로 정렬
+    // 별실/음향조정석/수유실을 메인 홀의 좌측·우측 구역 바로 뒤(같은 x축)로 정렬
     const secs = document.querySelectorAll('#hall .hall-sec');
     const leftSec = secs[0];
     const rightSec = secs[secs.length-1];
     const hallWrapEl = document.getElementById('hall-wrap');
     const hall2Wrap = document.getElementById('hall2-wrap');
     const hall3Wrap = document.getElementById('hall3-wrap');
+    const hall4Wrap = document.getElementById('hall4-wrap');
     if(leftSec && hallWrapEl && hall2Wrap){
       const offset = leftSec.getBoundingClientRect().left - hallWrapEl.getBoundingClientRect().left;
       hall2Wrap.style.justifyContent='flex-start';
@@ -308,6 +315,11 @@ function buildHall(){
       const offset = rightSec.getBoundingClientRect().left - hallWrapEl.getBoundingClientRect().left;
       hall3Wrap.style.justifyContent='flex-start';
       hall3Wrap.style.paddingLeft=Math.max(0,offset)+'px';
+    }
+    if(rightSec && hallWrapEl && hall4Wrap){
+      const offset = rightSec.getBoundingClientRect().left - hallWrapEl.getBoundingClientRect().left;
+      hall4Wrap.style.justifyContent='flex-start';
+      hall4Wrap.style.paddingLeft=Math.max(0,offset)+'px';
     }
   }, 50);
 }
@@ -626,6 +638,11 @@ document.addEventListener('DOMContentLoaded',()=>{
       <!-- 좌측 뒤편 별실 — 연단(앞쪽)의 반대인 뒤쪽, 좌측 좌석 바로 뒤에 위치 -->
       <div class="hall-wrap" id="hall2-wrap" style="margin-bottom:22px">
         <div class="hall" id="hall2"></div>
+      </div>
+
+      <!-- 음향조정석 뒤편 수유실 — 음향조정석보다 한 단계 더 뒤쪽 -->
+      <div class="hall-wrap" id="hall4-wrap" style="margin-bottom:22px">
+        <div class="hall" id="hall4"></div>
       </div>
 
       <!-- 우측 뒤편 음향조정석 — 뒤쪽, 우측 좌석 바로 뒤에 위치 -->
