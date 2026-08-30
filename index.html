@@ -104,7 +104,7 @@ const HALL_SECTIONS = [
 
 // 좌측 뒤편 별실 — 메인 홀과 별도의 방
 const EXTRA_SECTIONS = [
-  { id:'X', label:'별실 (좌측 뒤편)', cols:8, rows:6 },
+  { id:'X', label:'별실 (좌측 뒤편)', cols:6, rows:6 },
 ];
 
 const TEAM_COLORS = [
@@ -286,6 +286,15 @@ function buildHall(){
     const h=document.getElementById('hall');
     const sb=document.getElementById('stage-bar');
     if(h&&sb){ sb.style.width=h.offsetWidth+'px'; sb.style.maxWidth='none'; }
+    // 별실을 메인 홀의 "좌측" 구역 바로 뒤(같은 x축)로 정렬
+    const leftSec = document.querySelector('#hall .hall-sec');
+    const hallWrapEl = document.getElementById('hall-wrap');
+    const hall2Wrap = document.getElementById('hall2-wrap');
+    if(leftSec && hallWrapEl && hall2Wrap){
+      const offset = leftSec.getBoundingClientRect().left - hallWrapEl.getBoundingClientRect().left;
+      hall2Wrap.style.justifyContent='flex-start';
+      hall2Wrap.style.paddingLeft=Math.max(0,offset)+'px';
+    }
   }, 50);
 }
 
