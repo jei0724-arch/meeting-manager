@@ -137,14 +137,20 @@ const EXTRA_SECTIONS = [
   { id:'X', label:'별실 (좌측 뒤편)', cols:6, rows:6 },
 ];
 
-// 우측 뒤편 음향조정석 — 2인석
+// 우측 뒤편 음향조정석 — 2인석, 오른쪽에 일반 좌석 3개(세로 1열)를 간격을 두고 배치
 const SOUND_SECTIONS = [
   { id:'S', label:'음향조정석', cols:2, rows:1 },
+  { id:'E', label:'일반석', cols:1, rows:3 },
 ];
 
 // 음향조정석 뒤편 수유실
 const NURSING_SECTIONS = [
   { id:'N', label:'수유실', cols:2, rows:4 },
+];
+
+// 별실 아래쪽 안내인 자리 — 2인석(가로 배치), 별실과 간격을 두고 표시
+const GUIDE_SECTIONS = [
+  { id:'U', label:'안내인', cols:2, rows:1 },
 ];
 
 const TEAM_COLORS = [
@@ -408,13 +414,14 @@ function buildHall(){
   buildHallInto('hall2','hall2-wrap',EXTRA_SECTIONS);
   buildHallInto('hall3','hall3-wrap',SOUND_SECTIONS);
   buildHallInto('hall4','hall4-wrap',NURSING_SECTIONS);
+  buildHallInto('hall5','hall5-wrap',GUIDE_SECTIONS);
   updateSeatSummary();
   // 연단 너비를 hall과 동일하게
   setTimeout(()=>{
     const h=document.getElementById('hall');
     const sb=document.getElementById('stage-bar');
     if(h&&sb){ sb.style.width=h.offsetWidth+'px'; sb.style.maxWidth='none'; }
-    // 별실/음향조정석/수유실을 메인 홀의 좌측·우측 구역과 같은 x축으로 정렬
+    // 별실/음향조정석/수유실/안내인석을 메인 홀의 좌측·우측 구역과 같은 x축으로 정렬
     // (getBoundingClientRect는 좁은 화면에서 메인 홀 내용이 흘러넘쳐
     //  중앙정렬이 화면 밖으로 잘릴 때 좌표가 어긋나므로, 렌더링에 쓴
     //  값(sz/gap 등)으로 직접 계산해 항상 정확한 위치를 구한다)
@@ -422,6 +429,7 @@ function buildHall(){
     const hall2Wrap = document.getElementById('hall2-wrap');
     const hall3Wrap = document.getElementById('hall3-wrap');
     const hall4Wrap = document.getElementById('hall4-wrap');
+    const hall5Wrap = document.getElementById('hall5-wrap');
     if(hallWrapEl){
       const { sz, gap, aisleTotal } = calcSeatSize(HALL_SECTIONS, 'hall-wrap');
       const firstSec = HALL_SECTIONS[0];
@@ -443,6 +451,10 @@ function buildHall(){
       if(hall4Wrap){
         hall4Wrap.style.justifyContent='flex-start';
         hall4Wrap.style.paddingLeft=rightSecOffset+'px';
+      }
+      if(hall5Wrap){
+        hall5Wrap.style.justifyContent='flex-start';
+        hall5Wrap.style.paddingLeft=centerOffset+'px';
       }
     }
   }, 50);
@@ -1012,11 +1024,17 @@ document.addEventListener('DOMContentLoaded',()=>{
 
       <!-- 별실(좌측)과 수유실+음향조정석(우측)을 같은 높이로 좌우 배치 -->
       <div style="display:grid;margin-bottom:22px">
-        <div class="hall-wrap" id="hall2-wrap" style="grid-area:1/1">
-          <div class="hall" id="hall2"></div>
+        <div style="grid-area:1/1;display:flex;flex-direction:column;gap:14px;pointer-events:none">
+          <div class="hall-wrap" id="hall2-wrap">
+            <div class="hall" id="hall2"></div>
+          </div>
+          <!-- 별실 아래, 간격을 두고 배치되는 안내인 자리 -->
+          <div class="hall-wrap" id="hall5-wrap">
+            <div class="hall" id="hall5"></div>
+          </div>
         </div>
         <div style="grid-area:1/1;display:flex;flex-direction:column;gap:14px;pointer-events:none">
-          <!-- 음향조정석보다 한 단계 더 뒤쪽인 수유실이 위, 음향조정석이 아래 -->
+          <!-- 음향조정석보다 한 단계 더 뒤쪽인 수유실이 위, 음향조정석(+일반석)이 아래 -->
           <div class="hall-wrap" id="hall4-wrap">
             <div class="hall" id="hall4"></div>
           </div>
