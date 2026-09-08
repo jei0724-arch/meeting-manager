@@ -153,29 +153,16 @@ const GUIDE_SECTIONS = [
   { id:'U', label:'안내인', cols:2, rows:1 },
 ];
 
-const TEAM_COLORS = [
-  { bg:'rgba(127,119,221,0.12)', border:'rgba(127,119,221,0.4)', text:'#AFA9EC', dot:'#7F77DD' },
-  { bg:'rgba(29,158,117,0.12)',  border:'rgba(29,158,117,0.4)',  text:'#5DCAA5', dot:'#1D9E75' },
-  { bg:'rgba(216,90,48,0.12)',   border:'rgba(216,90,48,0.4)',   text:'#F0997B', dot:'#D85A30' },
-  { bg:'rgba(186,117,23,0.12)',  border:'rgba(186,117,23,0.4)',  text:'#FAC775', dot:'#BA7517' },
-  { bg:'rgba(212,83,126,0.12)', border:'rgba(212,83,126,0.4)', text:'#ED93B1', dot:'#D4537E' },
-  { bg:'rgba(99,153,34,0.12)',   border:'rgba(99,153,34,0.4)',   text:'#C0DD97', dot:'#639922' },
-];
-
 function loadLS(k,d){ try{ return JSON.parse(localStorage.getItem(k))??d; }catch{ return d; } }
 function saveLS(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch{} }
 
 let appState  = { mode:'offline', attendance:{} };
 let attLog    = loadLS('mg_att_log', []);
-let teamLog   = loadLS('mg_team_log', []);
 let seatData  = loadLS('mg_seats', {});
-let currentTeams = null;
 let MEMBERS = loadLS('mg_members', DEFAULT_MEMBERS.slice());
 let editingMemberIndex = null;
 let editingAttLogIndex = null;
 let editingAttAttendance = {};
-let editingTeamLogIndex = null;
-let editingTeams = null;
 
 /* ── Seating state ── */
 let activeId = null;
@@ -187,7 +174,6 @@ function switchTab(name){
   document.getElementById('tbtn-'+name).classList.add('tab-active');
   document.querySelectorAll('.panel-page').forEach(p=>p.style.display='none');
   document.getElementById('pp-'+name).style.display='block';
-  if(name==='team')    updateTeamInfo();
   if(name==='seating') buildHall();
   if(name==='stats')   renderStats();
 }
@@ -311,7 +297,6 @@ function updateAttSummary(){
     <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:12px;background:rgba(127,119,221,0.15);color:#AFA9EC">● 오프라인 ${off}명</span>
     <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:12px;background:rgba(186,117,23,0.15);color:#FAC775">● 줌 ${zm}명</span>
     <span style="font-size:12px;color:rgba(255,255,255,0.4)">총 ${off+zm}명</span>`;
-  updateTeamInfo();
 }
 function saveAttendance(){
   const attendees=Object.entries(appState.attendance);
@@ -615,76 +600,8 @@ function updateSeatSummary(){
     (zm.length?`<span class="ss zm">줌 ${zm.length}명: ${zm.map(s=>s.name).join(', ')}</span>`:'');
 }
 
-/* ══ TAB 3 — Team Building ══ */
-function updateTeamInfo(){
-  const el=document.getElementById('team-att-info');
-  if(!el) return;
-  const total=Object.keys(appState.attendance).length;
-  el.textContent=total?'현재 참석 인원: '+total+'명을 기반으로 팀을 구성합니다.':'참석 탭에서 참석자를 선택해주세요.';
-}
-function getPairCount(n1,n2){
-  let cnt=0;
-  teamLog.forEach(log=>log.teams.forEach(team=>{ if(team.includes(n1)&&team.includes(n2)) cnt++; }));
-  return cnt;
-}
-function generateTeams(){
-  const attendees=Object.keys(appState.attendance);
-  if(attendees.length<2){ showToast('참석자가 최소 2명 이상 필요합니다'); return; }
-  const mode=document.getElementById('team-mode-sel').value;
-  const val=parseInt(document.getElementById('team-val').value)||3;
-  let numTeams=mode==='count'?Math.min(val,attendees.length):Math.max(1,Math.floor(attendees.length/val));
-  const shuffled=[...attendees].sort(()=>Math.random()-0.5);
-  let teams=Array.from({length:numTeams},()=>[]);
-  shuffled.forEach(person=>{
-    let best=0,minP=Infinity;
-    teams.forEach((team,t)=>{
-      const maxSz=Math.ceil(shuffled.length/numTeams)+1;
-      if(team.length>=maxSz) return;
-      let p=team.reduce((s,m)=>s+getPairCount(person,m)*10,0)+team.length*0.01;
-      if(p<minP){ minP=p; best=t; }
-    });
-    teams[best].push(person);
-  });
-  currentTeams=teams;
-  renderTeamResult(teams);
-  document.getElementById('team-result').style.display='block';
-}
-function renderTeamResult(teams){
-  const grid=document.getElementById('team-grid');
-  grid.innerHTML=teams.map((team,i)=>{
-    const c=TEAM_COLORS[i%TEAM_COLORS.length];
-    const members=team.map(name=>{
-      const type=appState.attendance[name];
-      return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:0.5px solid rgba(255,255,255,0.06);font-size:12px">
-        <div style="width:7px;height:7px;border-radius:50%;background:${c.dot};flex-shrink:0"></div>
-        <span>${name}</span>
-        <span style="margin-left:auto;font-size:10px;color:${type==='zoom'?'#FAC775':'#AFA9EC'}">${type==='zoom'?'줌':'오프'}</span>
-      </div>`;
-    }).join('');
-    return `<div style="background:${c.bg};border:0.5px solid ${c.border};border-radius:12px;padding:14px">
-      <div style="color:${c.text};font-size:12px;font-weight:500;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid ${c.border}">
-        <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.dot};margin-right:6px"></span>
-        팀 ${i+1} <span style="font-weight:400;font-size:11px;opacity:.7">${team.length}명</span>
-      </div>${members}</div>`;
-  }).join('');
-  const pairs=[];
-  const names=Object.keys(appState.attendance);
-  names.forEach((p1,i)=>names.slice(i+1).forEach(p2=>{ const cnt=getPairCount(p1,p2); if(cnt>0) pairs.push({p1,p2,cnt}); }));
-  pairs.sort((a,b)=>b.cnt-a.cnt);
-  const pEl=document.getElementById('pair-info');
-  if(!pairs.length){ pEl.innerHTML='<p style="color:rgba(255,255,255,0.4);font-size:12px">이번이 첫 번째 매칭입니다.</p>'; }
-  else { pEl.innerHTML=pairs.slice(0,12).map(p=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid rgba(255,255,255,0.06);font-size:12px"><span style="color:rgba(255,255,255,0.6)">${p.p1} + ${p.p2}</span><span style="margin-left:auto;font-weight:500;color:${p.cnt>=3?'#F0997B':p.cnt>=2?'#FAC775':'#5DCAA5'}">${p.cnt}회</span></div>`).join(''); }
-}
-function saveTeams(){
-  if(!currentTeams) return;
-  const now=new Date();
-  const ds=now.toLocaleDateString('ko-KR')+' '+now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-  teamLog.unshift({date:ds,teams:currentTeams,timestamp:now.getTime()});
-  saveLS('mg_team_log',teamLog); renderHistory(); showToast('✓ 팀 구성이 저장되었습니다');
-}
-
-/* ══ TAB 4 — History ══ */
-function renderHistory(){ renderAttHistory(); renderTeamHistory(); }
+/* ══ TAB 3 — History ══ */
+function renderHistory(){ renderAttHistory(); }
 function renderAttHistory(){
   const el=document.getElementById('att-hist-list');
   if(!attLog.length){ el.innerHTML='<div style="text-align:center;padding:2rem;font-size:12px;color:rgba(255,255,255,0.3)">기록 없음</div>'; return; }
@@ -750,86 +667,10 @@ function saveEditAttLog(i){
   showToast('✓ 수정되었습니다');
 }
 function cancelEditAttLog(){ editingAttLogIndex=null; editingAttAttendance={}; renderAttHistory(); }
-
-function renderTeamHistory(){
-  const el=document.getElementById('team-hist-list');
-  if(!teamLog.length){ el.innerHTML='<div style="text-align:center;padding:2rem;font-size:12px;color:rgba(255,255,255,0.3)">기록 없음</div>'; return; }
-  el.innerHTML=teamLog.map((log,i)=>{
-    if(i===editingTeamLogIndex){
-      return `<div class="glass rounded-lg mb-2 overflow-hidden">
-        <div style="padding:10px 14px;font-size:13px;font-weight:500">${log.date} <span style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:400">— 수정 중</span></div>
-        <div style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07)">${renderTeamEditBody(i)}</div>
-      </div>`;
-    }
-    const total=log.teams.reduce((s,t)=>s+t.length,0);
-    const th=log.teams.map((team,ti)=>{ const c=TEAM_COLORS[ti%TEAM_COLORS.length]; return `<div style="margin-bottom:4px"><span style="color:${c.text};font-size:11px">팀 ${ti+1}</span> <span style="color:rgba(255,255,255,0.45);font-size:12px">— ${team.join(', ')}</span></div>`; }).join('');
-    return `<div class="glass rounded-lg mb-2 overflow-hidden">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer" onclick="document.getElementById('th-${i}').classList.toggle('open')">
-        <span style="font-size:13px">${log.date}</span>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">${log.teams.length}팀 · ${total}명</span>
-          <button onclick="event.stopPropagation();startEditTeamLog(${i})" class="btn-sm" style="font-size:11px;padding:2px 8px">수정</button>
-          <button onclick="event.stopPropagation();deleteTeamLog(${i})" style="font-size:11px;padding:2px 8px;border-radius:5px;border:0.5px solid rgba(216,90,48,0.4);background:rgba(216,90,48,0.1);color:#F0997B;cursor:pointer">삭제</button>
-        </div>
-      </div>
-      <div class="history-body" id="th-${i}" style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07)">${th}</div></div>`;
-  }).join('');
-}
-function startEditTeamLog(i){
-  editingTeamLogIndex=i;
-  editingTeams=teamLog[i].teams.map(t=>t.slice());
-  renderTeamHistory();
-  document.getElementById('th-'+i)?.classList.add('open');
-}
-function renderTeamEditBody(i){
-  const teamsHtml=editingTeams.map((team,ti)=>{
-    const c=TEAM_COLORS[ti%TEAM_COLORS.length];
-    const rows=team.map((name,mi)=>{
-      const options=editingTeams.map((_,tj)=>`<option value="${tj}"${tj===ti?' selected':''}>팀 ${tj+1}</option>`).join('');
-      return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
-        <span style="flex:1;font-size:12px;color:rgba(255,255,255,0.6)">${name}</span>
-        <select onchange="moveEditMember(${ti},${mi},this.value)" style="font-size:11px;padding:2px 6px">${options}</select>
-        <button onclick="removeEditMember(${ti},${mi})" class="btn-sm danger" style="padding:2px 6px;font-size:11px">✕</button>
-      </div>`;
-    }).join('');
-    return `<div style="margin-bottom:10px;padding:8px;border-radius:8px;border:0.5px solid ${c.border}">
-      <div style="color:${c.text};font-size:11px;font-weight:500;margin-bottom:4px">팀 ${ti+1} <span style="font-weight:400;opacity:.7">${team.length}명</span></div>
-      ${rows||'<div style="font-size:11px;color:rgba(255,255,255,0.3)">비어 있음</div>'}
-    </div>`;
-  }).join('');
-  return `${teamsHtml}
-    <div style="display:flex;gap:6px;margin-top:6px">
-      <button onclick="saveEditTeamLog(${i})" class="btn-sm">저장</button>
-      <button onclick="cancelEditTeamLog()" class="btn-sm">취소</button>
-    </div>`;
-}
-function moveEditMember(ti,mi,targetTiStr){
-  const targetTi=parseInt(targetTiStr,10);
-  if(targetTi===ti) return;
-  const [name]=editingTeams[ti].splice(mi,1);
-  editingTeams[targetTi].push(name);
-  renderTeamHistory();
-  document.getElementById('th-'+editingTeamLogIndex)?.classList.add('open');
-}
-function removeEditMember(ti,mi){
-  editingTeams[ti].splice(mi,1);
-  renderTeamHistory();
-  document.getElementById('th-'+editingTeamLogIndex)?.classList.add('open');
-}
-function saveEditTeamLog(i){
-  teamLog[i].teams=editingTeams.map(t=>t.slice());
-  saveLS('mg_team_log',teamLog);
-  editingTeamLogIndex=null; editingTeams=null;
-  renderTeamHistory();
-  showToast('✓ 수정되었습니다');
-}
-function cancelEditTeamLog(){ editingTeamLogIndex=null; editingTeams=null; renderTeamHistory(); }
 function clearAttLog(){ if(!attLog.length) return; if(!confirm('참석 기록을 모두 삭제할까요?')) return; attLog=[]; saveLS('mg_att_log',attLog); renderRecentLog(); renderAttHistory(); showToast('삭제되었습니다'); }
-function clearTeamLog(){ if(!teamLog.length) return; if(!confirm('팀 빌딩 기록을 모두 삭제할까요?')) return; teamLog=[]; saveLS('mg_team_log',teamLog); renderTeamHistory(); showToast('삭제되었습니다'); }
 function deleteAttLog(i){ if(!confirm(attLog[i].date+' 기록을 삭제할까요?')) return; attLog.splice(i,1); saveLS('mg_att_log',attLog); editingAttLogIndex=null; editingAttAttendance={}; renderRecentLog(); renderAttHistory(); showToast('삭제되었습니다'); }
-function deleteTeamLog(i){ if(!confirm(teamLog[i].date+' 기록을 삭제할까요?')) return; teamLog.splice(i,1); saveLS('mg_team_log',teamLog); editingTeamLogIndex=null; editingTeams=null; renderTeamHistory(); showToast('삭제되었습니다'); }
 
-/* ══ TAB 5 — Stats ══ */
+/* ══ TAB 4 — Stats ══ */
 function renderStats(){
   const empty=document.getElementById('stats-empty');
   const content=document.getElementById('stats-content');
@@ -957,8 +798,7 @@ function showToast(msg){ const t=document.getElementById('toast'); t.textContent
 
 document.addEventListener('DOMContentLoaded',()=>{
   setMode('offline');
-  renderMemberList(); updateAttSummary(); renderRecentLog(); renderHistory(); updateTeamInfo();
-  document.getElementById('team-mode-sel').addEventListener('change',function(){ document.getElementById('team-val-label').textContent=this.value==='count'?'개 팀':'명씩'; });
+  renderMemberList(); updateAttSummary(); renderRecentLog(); renderHistory();
   document.getElementById('sp-input').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const n=e.target.value.trim(); if(n) assignSeat(n); }});
 });
 </script>
@@ -966,15 +806,14 @@ document.addEventListener('DOMContentLoaded',()=>{
 <div class="max-w-6xl mx-auto px-3 py-6" style="box-sizing:border-box;max-width:100%;">
   <div class="mb-7">
     <h1 style="font-size:20px;font-weight:500;letter-spacing:-0.03em">모임 매니저</h1>
-    <p style="font-size:13px;margin-top:4px;color:rgba(255,255,255,0.4)">참석 확인 · 좌석 배치 · 스마트 팀 매칭 — 데이터는 브라우저에 자동 저장</p>
+    <p style="font-size:13px;margin-top:4px;color:rgba(255,255,255,0.4)">참석 확인 · 좌석 배치 — 데이터는 브라우저에 자동 저장</p>
   </div>
 
   <div style="display:flex;gap:2px;border-bottom:0.5px solid rgba(255,255,255,0.1);margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;scrollbar-width:none;">
     <button id="tbtn-attendance" class="tab-btn tab-active" style="background:none;border:none;border-bottom:2px solid #e8e8e6;color:#e8e8e6;font-weight:500;padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('attendance')">① 참석 확인</button>
     <button id="tbtn-seating"    class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('seating')">② 좌석 배치</button>
-    <button id="tbtn-team"       class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('team')">③ 팀 빌딩</button>
-    <button id="tbtn-history"    class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('history')">④ 히스토리</button>
-    <button id="tbtn-stats"      class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('stats')">⑤ 통계</button>
+    <button id="tbtn-history"    class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('history')">③ 히스토리</button>
+    <button id="tbtn-stats"      class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('stats')">④ 통계</button>
   </div>
 
   <!-- ① 참석 확인 -->
@@ -1097,59 +936,18 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
   </div>
 
-  <!-- ③ 팀 빌딩 -->
-  <div id="pp-team" class="panel-page" style="display:none">
-    <div class="glass rounded-xl p-5 mb-4">
-      <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3);margin-bottom:12px">팀 구성 설정</div>
-      <div id="team-att-info" style="font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:14px"></div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-        <select id="team-mode-sel"><option value="count">팀 개수로 나누기</option><option value="size">팀당 인원으로 나누기</option></select>
-        <input type="number" id="team-val" value="3" min="2" max="20" style="width:64px">
-        <span id="team-val-label" style="font-size:13px;color:rgba(255,255,255,0.4)">개 팀</span>
-      </div>
-      <button onclick="generateTeams()" class="btn-primary px-6 py-2 rounded-lg" style="font-size:13px;font-weight:500">✦ 팀 자동 매칭</button>
-    </div>
-    <div id="team-result" style="display:none">
-      <div class="glass rounded-xl p-5 mb-4">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">매칭 결과</div>
-          <button onclick="saveTeams()" class="btn-sm" style="background:#e8e8e6;color:#0f0f0f;border-color:#e8e8e6">이 팀 구성 저장</button>
-        </div>
-        <div id="team-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px"></div>
-      </div>
-      <div class="glass rounded-xl p-5">
-        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3);margin-bottom:6px">중복 가중치 현황</div>
-        <p style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:10px">과거 같은 팀 횟수 — 많을수록 다른 팀 배치</p>
-        <div id="pair-info"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ④ 히스토리 -->
+  <!-- ③ 히스토리 -->
   <div id="pp-history" class="panel-page" style="display:none">
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem">
-      <div>
-        <div class="glass rounded-xl p-5">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">참석 기록</div>
-            <button onclick="clearAttLog()" class="btn-sm danger" style="font-size:11px;padding:3px 10px">전체 삭제</button>
-          </div>
-          <div id="att-hist-list" style="max-height:520px;overflow-y:auto"></div>
-        </div>
+    <div class="glass rounded-xl p-5">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">참석 기록</div>
+        <button onclick="clearAttLog()" class="btn-sm danger" style="font-size:11px;padding:3px 10px">전체 삭제</button>
       </div>
-      <div>
-        <div class="glass rounded-xl p-5">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">팀 빌딩 기록</div>
-            <button onclick="clearTeamLog()" class="btn-sm danger" style="font-size:11px;padding:3px 10px">전체 삭제</button>
-          </div>
-          <div id="team-hist-list" style="max-height:520px;overflow-y:auto"></div>
-        </div>
-      </div>
+      <div id="att-hist-list" style="max-height:520px;overflow-y:auto"></div>
     </div>
   </div>
 
-  <!-- ⑤ 통계 -->
+  <!-- ④ 통계 -->
   <div id="pp-stats" class="panel-page" style="display:none">
     <div id="stats-empty" style="display:none;text-align:center;padding:3rem;font-size:13px;color:rgba(255,255,255,0.3)">참석 기록이 없습니다. 참석 확인 탭에서 기록을 저장해주세요.</div>
     <div id="stats-content">
