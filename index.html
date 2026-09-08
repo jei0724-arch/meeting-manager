@@ -99,6 +99,24 @@
   .chart-tooltip .ct-key { width:8px; height:2px; border-radius:1px; flex-shrink:0; }
   .stats-table-row { display:flex; gap:10px; padding:5px 0; font-size:12px; border-bottom:0.5px solid rgba(255,255,255,0.06); color:rgba(255,255,255,0.5); }
   .stats-table-row span { flex:1; }
+
+  /* ── Group assignment (조편성) ── */
+  .grp-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:10px; }
+  .grp-table { border-collapse:collapse; width:100%; min-width:760px; font-size:12px; }
+  .grp-table th, .grp-table td { padding:7px 10px; text-align:center; border:0.5px solid rgba(255,255,255,0.07); white-space:nowrap; }
+  .grp-table thead th { background:rgba(255,255,255,0.03); font-weight:600; }
+  .grp-th-label { color:rgba(255,255,255,0.35); font-weight:500; }
+  .grp-th-count { display:block; font-size:10px; font-weight:400; color:rgba(255,255,255,0.45); margin-top:2px; }
+  .grp-rownum { color:rgba(255,255,255,0.4); font-weight:500; }
+  tr.grp-sup-row td { background:rgba(255,255,255,0.07); font-weight:600; }
+  tr.grp-asst-row td { background:rgba(255,255,255,0.035); }
+  tr.grp-first-row td { border-top:2px solid rgba(255,255,255,0.18); }
+  .grp-cell { cursor:pointer; color:rgba(255,255,255,0.75); transition:background .12s,color .12s; }
+  .grp-cell:hover { background:rgba(255,255,255,0.08); }
+  .grp-cell.grp-checked { background:rgba(34,197,94,0.2); color:#7CE0A0; font-weight:600; }
+  .grp-cell.grp-checked::before { content:'✓ '; }
+  .grp-cell.grp-irregular { opacity:.5; font-style:italic; }
+  .grp-cell.grp-empty { cursor:default; background:rgba(255,255,255,0.015); }
 </style>
 </head>
 <body>
@@ -153,6 +171,46 @@ const GUIDE_SECTIONS = [
   { id:'U', label:'안내인', cols:2, rows:1 },
 ];
 
+/* =====================================================
+   조편성 데이터 — 첫 칸은 행 라벨, 나머지 8칸은 각 집단(그룹)
+===================================================== */
+const GROUP_DATA = {
+  columns: ["집단","사랑","기름","평화","진절","선함","믿음","온화","자제"],
+  supervisor: ["감독자","정건영","한용준","김대윤","전진","김경국","조민우","서진영","이대식"],
+  assistant:  ["보조자","정규식","전영선","박사용","배종민","김보현","김보현","김태용","윤기현"],
+  rows: [
+    ["1","정건영","한용준","김대윤","전진","김경국","조민우","서진영","이대식"],
+    ["2","김선영","김휘주","김아름","김은희","강한나B","강한나A","안아리","이은영"],
+    ["3","정재원","전영선","신정규","이순자","김세웅","김보현","김태웅","윤기현"],
+    ["4","이지희","이지희","김선향","김민지","송지은","이수련","배석순","하정숙"],
+    ["5","이현재","(전하름)","신은서","","(강우진)","최선희","문흥순","정지윤"],
+    ["6","김수영","(전하린)","신현서","","김여은","나용식","배재준","이화순"],
+    ["7","김한별","김은경","양준석","김인숙","김소리","차희영","(배영빈)","공진호"],
+    ["8","정규식","김지훈","오미애","김원철","김재민","(정태우)","김이순","박옥녀"],
+    ["9","현은경","신나라","유용순","은지연","이지현","변도출","김우준","최승호"],
+    ["10","정혜진","(김지나)","공영엽","(김선윤)","유승겸","송영순","홍정희","용서광"],
+    ["11","백명현","김지민A","김윤숙","김부금","유효린","허영옥","(김다미)","임태규"],
+    ["12","임명희","박우빈","이도경","홍성준","홍석준","김희진","박상민","김보미"],
+    ["13","김은식","박미진","박시용","배순자","홍석준","최대식","강향희","임승빈"],
+    ["14","김지은","이계분","김인정","정은영","김남인","이은경","박서현",""],
+    ["15","김슬아","유승현","","신희주","김은솔","박표진","김지민B","정한비슬"],
+    ["16","김시후","임나리","","배종민","","신승아","배슬기",""],
+    ["17","","","","김두리","","신승아","유성훈",""],
+    ["18","","","","","","","최수지",""]
+  ]
+};
+
+const GROUP_COLORS = [
+  { text:'#AFA9EC', bg:'rgba(127,119,221,0.14)' },
+  { text:'#5DCAA5', bg:'rgba(29,158,117,0.14)'  },
+  { text:'#F0997B', bg:'rgba(216,90,48,0.14)'   },
+  { text:'#FAC775', bg:'rgba(186,117,23,0.14)'  },
+  { text:'#ED93B1', bg:'rgba(212,83,126,0.14)'  },
+  { text:'#C0DD97', bg:'rgba(99,153,34,0.14)'   },
+  { text:'#7EC8E3', bg:'rgba(43,133,175,0.14)'  },
+  { text:'#E3C87E', bg:'rgba(175,144,43,0.14)'  },
+];
+
 function loadLS(k,d){ try{ return JSON.parse(localStorage.getItem(k))??d; }catch{ return d; } }
 function saveLS(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch{} }
 
@@ -163,6 +221,7 @@ let MEMBERS = loadLS('mg_members', DEFAULT_MEMBERS.slice());
 let editingMemberIndex = null;
 let editingAttLogIndex = null;
 let editingAttAttendance = {};
+let groupAttendance = {};
 
 /* ── Seating state ── */
 let activeId = null;
@@ -176,6 +235,7 @@ function switchTab(name){
   document.getElementById('pp-'+name).style.display='block';
   if(name==='seating') buildHall();
   if(name==='stats')   renderStats();
+  if(name==='groups')  renderGroupTab();
 }
 
 /* ══ TAB 1 — Attendance ══ */
@@ -794,6 +854,75 @@ function moveChartTooltip(evt){
 }
 function hideChartTooltip(){ document.getElementById('chart-tooltip').classList.remove('show'); }
 
+/* ══ TAB 5 — Group Assignment (조편성) ══ */
+function groupCell(name, id){
+  if(!name) return '<td class="grp-cell grp-empty"></td>';
+  const irregular = /^\(.*\)$/.test(name);
+  const checked = !!groupAttendance[id];
+  const cls = 'grp-cell'+(checked?' grp-checked':'')+(irregular?' grp-irregular':'');
+  return `<td class="${cls}" onclick="toggleGroupCell('${id}')">${name}</td>`;
+}
+
+function renderGroupTab(){
+  const table=document.getElementById('grp-table');
+  if(!table) return;
+  const ncols=GROUP_DATA.columns.length-1;
+
+  const thead='<thead><tr><th class="grp-th-label">'+GROUP_DATA.columns[0]+'</th>'+
+    GROUP_DATA.columns.slice(1).map((name,ci)=>{
+      const c=GROUP_COLORS[ci%GROUP_COLORS.length];
+      return `<th style="color:${c.text};background:${c.bg}">${name}<span class="grp-th-count" id="grp-count-${ci}"></span></th>`;
+    }).join('')+'</tr></thead>';
+
+  let body='<tr class="grp-sup-row"><td class="grp-rownum">'+GROUP_DATA.supervisor[0]+'</td>'+
+    GROUP_DATA.supervisor.slice(1).map((name,ci)=>groupCell(name,'sup'+ci)).join('')+'</tr>';
+  body+='<tr class="grp-asst-row"><td class="grp-rownum">'+GROUP_DATA.assistant[0]+'</td>'+
+    GROUP_DATA.assistant.slice(1).map((name,ci)=>groupCell(name,'asst'+ci)).join('')+'</tr>';
+  GROUP_DATA.rows.forEach((row,ri)=>{
+    body+=`<tr${ri===0?' class="grp-first-row"':''}><td class="grp-rownum">${row[0]}</td>`+
+      row.slice(1).map((name,ci)=>groupCell(name,'r'+ri+'c'+ci)).join('')+'</tr>';
+  });
+
+  table.innerHTML=thead+'<tbody>'+body+'</tbody>';
+  updateGroupSummary();
+}
+
+function toggleGroupCell(id){
+  if(groupAttendance[id]) delete groupAttendance[id];
+  else groupAttendance[id]=true;
+  renderGroupTab();
+}
+
+function updateGroupSummary(){
+  const ncols=GROUP_DATA.columns.length-1;
+  let totalAll=0, checkedAll=0;
+  for(let ci=0; ci<ncols; ci++){
+    let total=0, checked=0;
+    if(GROUP_DATA.supervisor[ci+1]){ total++; if(groupAttendance['sup'+ci]) checked++; }
+    if(GROUP_DATA.assistant[ci+1]){ total++; if(groupAttendance['asst'+ci]) checked++; }
+    GROUP_DATA.rows.forEach((row,ri)=>{ if(row[ci+1]){ total++; if(groupAttendance['r'+ri+'c'+ci]) checked++; } });
+    const el=document.getElementById('grp-count-'+ci);
+    if(el) el.textContent=checked+'/'+total+'명';
+    totalAll+=total; checkedAll+=checked;
+  }
+  const rateEl=document.getElementById('grp-rate');
+  if(rateEl){
+    const pct=totalAll>0?Math.round(checkedAll/totalAll*100):0;
+    rateEl.textContent=`전체 참석률 ${pct}% (${checkedAll}/${totalAll}명)`;
+  }
+}
+
+function saveGroupAttendance(){
+  const checkedIds=Object.keys(groupAttendance).filter(id=>groupAttendance[id]);
+  if(!checkedIds.length){ showToast('체크된 참석자가 없습니다'); return; }
+  const now=new Date();
+  const ds=now.toLocaleDateString('ko-KR')+' '+now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  const groupLog=loadLS('mg_group_log',[]);
+  groupLog.unshift({date:ds, attendance:{...groupAttendance}, timestamp:now.getTime()});
+  saveLS('mg_group_log',groupLog);
+  showToast('✓ 조편성 참석 현황이 저장되었습니다');
+}
+
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 
 document.addEventListener('DOMContentLoaded',()=>{
@@ -814,6 +943,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     <button id="tbtn-seating"    class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('seating')">② 좌석 배치</button>
     <button id="tbtn-history"    class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('history')">③ 히스토리</button>
     <button id="tbtn-stats"      class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('stats')">④ 통계</button>
+    <button id="tbtn-groups"     class="tab-btn" style="background:none;border:none;border-bottom:2px solid transparent;color:rgba(255,255,255,0.4);padding:8px 16px;font-size:13px;cursor:pointer;margin-bottom:-1px" onclick="switchTab('groups')">⑤ 조편성</button>
   </div>
 
   <!-- ① 참석 확인 -->
@@ -990,6 +1120,23 @@ document.addEventListener('DOMContentLoaded',()=>{
           <span style="font-size:11px;color:rgba(255,255,255,0.3)" id="rank-count-label"></span>
         </div>
         <div id="rank-list" style="max-height:420px;overflow-y:auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑤ 조편성 -->
+  <div id="pp-groups" class="panel-page" style="display:none">
+    <div class="glass rounded-xl p-5">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">조편성 참석 체크</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span id="grp-rate" style="font-size:12px;color:rgba(255,255,255,0.5)">전체 참석률 0% (0/0명)</span>
+          <button onclick="saveGroupAttendance()" class="btn-primary px-4 py-1.5 rounded-lg" style="font-size:12px;font-weight:500">참석 현황 저장</button>
+        </div>
+      </div>
+      <p style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:12px">이름을 클릭하면 참석 체크가 토글됩니다 · <span style="opacity:.6;font-style:italic">(괄호)</span>는 비정규 멤버</p>
+      <div class="grp-wrap">
+        <table id="grp-table" class="grp-table"></table>
       </div>
     </div>
   </div>
