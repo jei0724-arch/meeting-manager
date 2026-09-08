@@ -440,13 +440,19 @@ function buildHall(){
       const centerOffset = Math.max(0, (hallWrapEl.clientWidth - totalHallWidth) / 2);
       const lastSecWidth = lastSec.cols*sz + (lastSec.cols-1)*gap;
       const rightSecOffset = centerOffset + (totalHallWidth - lastSecWidth);
+      const hallRightEdge = centerOffset + totalHallWidth;
       if(hall2Wrap){
         hall2Wrap.style.justifyContent='flex-start';
         hall2Wrap.style.paddingLeft=centerOffset+'px';
       }
       if(hall3Wrap){
+        // 음향조정석(SOUND_SECTIONS의 마지막 구역) 오른쪽 끝을 우측 좌석의 끝과 맞춘다
+        const soundSz = calcSeatSize(SOUND_SECTIONS, 'hall3-wrap');
+        const soundTotalCols = SOUND_SECTIONS.reduce((s,sec)=>s+sec.cols,0);
+        const soundNumAisles = SOUND_SECTIONS.length-1;
+        const soundWidth = soundTotalCols*soundSz.sz + (soundTotalCols-1)*soundSz.gap + soundNumAisles*soundSz.aisleTotal;
         hall3Wrap.style.justifyContent='flex-start';
-        hall3Wrap.style.paddingLeft=rightSecOffset+'px';
+        hall3Wrap.style.paddingLeft=Math.max(0, hallRightEdge - soundWidth)+'px';
       }
       if(hall4Wrap){
         hall4Wrap.style.justifyContent='flex-start';
@@ -455,6 +461,16 @@ function buildHall(){
       if(hall5Wrap){
         hall5Wrap.style.justifyContent='flex-start';
         hall5Wrap.style.paddingLeft=centerOffset+'px';
+      }
+      // 일반석/음향조정석(hall3)을 안내인(hall5)과 같은 행 높이로 내린다
+      // (별실이 수유실보다 세로로 길어 기본 배치로는 두 줄의 높이가 어긋나므로,
+      //  실제 렌더된 높이 차만큼 hall3에 위쪽 여백을 더해 맞춘다)
+      const hall2WrapEl = document.getElementById('hall2-wrap');
+      const hall4WrapEl = document.getElementById('hall4-wrap');
+      if(hall2WrapEl && hall4WrapEl && hall3Wrap){
+        const secondRowTop = hall2WrapEl.offsetHeight + 14;
+        const defaultHall3Top = hall4WrapEl.offsetHeight + 14;
+        hall3Wrap.style.marginTop = Math.max(0, secondRowTop - defaultHall3Top)+'px';
       }
     }
   }, 50);
