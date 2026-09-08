@@ -513,18 +513,24 @@ function buildQChips(){
   const used=new Set(Object.entries(seatData).filter(([k])=>k!==activeId).map(([,v])=>v.name));
   const el=document.getElementById('qchips');
   el.innerHTML='';
-  MEMBERS.forEach(name=>{
+  const attendees=MEMBERS.filter(name=>appState.attendance[name]);
+  if(!attendees.length){
+    el.innerHTML='<div style="font-size:12px;color:rgba(255,255,255,0.3)">참석 확인 탭에서 참석자를 먼저 선택해주세요</div>';
+    return;
+  }
+  attendees.forEach(name=>{
     const chip=document.createElement('div');
-    const hcls=curType==='zoom'?'zm-h':'off-h';
+    const hcls=appState.attendance[name]==='zoom'?'zm-h':'off-h';
     chip.className='qchip '+hcls+(used.has(name)?' used':'');
     chip.textContent=name;
-    chip.onclick=()=>assignSeat(name);
+    chip.onclick=()=>assignSeat(name,appState.attendance[name]);
     el.appendChild(chip);
   });
 }
 
-function assignSeat(name){
+function assignSeat(name,type){
   if(!activeId) return;
+  if(type){ curType=type; setSeatType(type); }
   // 이미 다른 자리에 배정된 사람이면 기존 자리 비우기
   const prevKey = Object.keys(seatData).find(k => k !== activeId && seatData[k].name === name);
   if(prevKey){
