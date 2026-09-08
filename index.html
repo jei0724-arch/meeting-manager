@@ -454,7 +454,7 @@ function buildHall(){
       }
       if(hall5Wrap){
         hall5Wrap.style.justifyContent='flex-start';
-        hall5Wrap.style.paddingLeft=centerOffset+'px';
+        hall5Wrap.style.paddingLeft=rightSecOffset+'px';
       }
     }
   }, 50);
@@ -1022,24 +1022,21 @@ document.addEventListener('DOMContentLoaded',()=>{
         </div>
       </div>
 
-      <!-- 별실(좌측)과 수유실+음향조정석(우측)을 같은 높이로 좌우 배치 -->
+      <!-- 별실(좌측)과 수유실+음향조정석+안내인(우측)을 같은 높이로 좌우 배치 -->
       <div style="display:grid;margin-bottom:22px">
-        <div style="grid-area:1/1;display:flex;flex-direction:column;gap:14px;pointer-events:none">
-          <div class="hall-wrap" id="hall2-wrap">
-            <div class="hall" id="hall2"></div>
-          </div>
-          <!-- 별실 아래, 간격을 두고 배치되는 안내인 자리 -->
-          <div class="hall-wrap" id="hall5-wrap">
-            <div class="hall" id="hall5"></div>
-          </div>
+        <div class="hall-wrap" id="hall2-wrap" style="grid-area:1/1">
+          <div class="hall" id="hall2"></div>
         </div>
         <div style="grid-area:1/1;display:flex;flex-direction:column;gap:14px;pointer-events:none">
-          <!-- 음향조정석보다 한 단계 더 뒤쪽인 수유실이 위, 음향조정석(+일반석)이 아래 -->
+          <!-- 같은 열(우측)에 위에서부터 수유실 → 음향조정석(+일반석) → 안내인 순으로 배치 -->
           <div class="hall-wrap" id="hall4-wrap">
             <div class="hall" id="hall4"></div>
           </div>
           <div class="hall-wrap" id="hall3-wrap">
             <div class="hall" id="hall3"></div>
+          </div>
+          <div class="hall-wrap" id="hall5-wrap">
+            <div class="hall" id="hall5"></div>
           </div>
         </div>
       </div>
