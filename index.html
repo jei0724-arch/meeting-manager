@@ -905,15 +905,44 @@ function groupDataHasName(name){
   return GROUP_DATA.rows.some(row=>row.includes(name));
 }
 
-function toggleGroupEditMode(){
-  groupEditMode=!groupEditMode;
+function applyGroupEditModeUI(){
   const btn=document.getElementById('grp-edit-btn');
   if(btn) btn.textContent=groupEditMode?'편집 완료':'이름 편집';
   const hint=document.getElementById('grp-hint');
   if(hint) hint.textContent=groupEditMode
     ? '이름을 수정한 후 Enter 또는 다른 곳을 클릭하면 저장됩니다. 비워두면 삭제됩니다.'
     : '이름을 클릭하면 참석 체크가 토글됩니다 (참석 확인 탭과 실시간 연동)';
+}
+
+function toggleGroupEditMode(){
+  groupEditMode=!groupEditMode;
+  applyGroupEditModeUI();
   renderGroupTab();
+}
+
+function toggleGroupAddPanel(){
+  const el=document.getElementById('grp-add-panel');
+  const show=el.style.display==='none';
+  el.style.display=show?'flex':'none';
+  if(show){ document.getElementById('new-group-input').value=''; document.getElementById('new-group-input').focus(); }
+}
+
+function addGroupColumn(){
+  const input=document.getElementById('new-group-input');
+  const name=input.value.trim();
+  if(!name) return;
+  if(GROUP_DATA.columns.includes(name)){ showToast('이미 있는 집단 이름입니다'); return; }
+  GROUP_DATA.columns.push(name);
+  GROUP_DATA.supervisor.push('');
+  GROUP_DATA.assistant.push('');
+  GROUP_DATA.rows.forEach(row=>row.push(''));
+  saveLS('mg_group_data', GROUP_DATA);
+  input.value='';
+  document.getElementById('grp-add-panel').style.display='none';
+  groupEditMode=true;
+  applyGroupEditModeUI();
+  renderGroupTab();
+  showToast('✓ "'+name+'" 집단이 추가되었습니다. 이름을 입력해주세요');
 }
 
 function updateGroupName(kind, ri, ci, newValRaw){
@@ -1160,9 +1189,15 @@ document.addEventListener('DOMContentLoaded',()=>{
         <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">집단편성표 참석 체크</div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <span id="grp-rate" style="font-size:12px;color:rgba(255,255,255,0.5)">전체 참석률 0% (0/0명)</span>
+          <button onclick="toggleGroupAddPanel()" class="btn-sm" style="font-size:12px;padding:5px 12px">+ 집단 추가</button>
           <button onclick="toggleGroupEditMode()" id="grp-edit-btn" class="btn-sm" style="font-size:12px;padding:5px 12px">이름 편집</button>
           <button onclick="saveAttendance()" class="btn-primary px-4 py-1.5 rounded-lg" style="font-size:12px;font-weight:500">참석 현황 저장</button>
         </div>
+      </div>
+      <div id="grp-add-panel" class="manual-row" style="display:none;margin-bottom:12px">
+        <input type="text" id="new-group-input" placeholder="새 집단 이름" onkeydown="if(event.key==='Enter')addGroupColumn()">
+        <button onclick="addGroupColumn()" class="btn-sm">추가</button>
+        <button onclick="toggleGroupAddPanel()" class="btn-sm">취소</button>
       </div>
       <p id="grp-hint" style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:12px">이름을 클릭하면 참석 체크가 토글됩니다 (참석 확인 탭과 실시간 연동) · <span style="opacity:.6;font-style:italic">(괄호)</span>는 비정규 멤버</p>
       <div class="grp-wrap">
