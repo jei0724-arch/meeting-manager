@@ -217,10 +217,8 @@ function renderMemberList(){
     let cls='flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm glass glass-hover';
     if(att==='offline') cls+=' member-checked-off';
     else if(att==='zoom') cls+=' member-checked-zm';
-    const bg=att==='zoom'?'background:rgba(186,117,23,0.25);color:#FAC775':'background:rgba(127,119,221,0.25);color:#AFA9EC';
     return `<div class="${cls}" onclick="toggleMember('${name}')">
-      <div style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0;${bg}">${name[0]}</div>
-      <span>${name}</span>
+      <span style="font-weight:500">${name}</span>
       ${att?'<svg style="margin-left:auto;flex-shrink:0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>':''}
     </div>`;
   }).join('');
