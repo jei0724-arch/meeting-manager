@@ -118,6 +118,8 @@
   .grp-cell.grp-att-off::before, .grp-cell.grp-att-zm::before { content:'✓ '; }
   .grp-cell.grp-irregular { opacity:.5; font-style:italic; }
   .grp-cell.grp-empty { cursor:default; background:rgba(255,255,255,0.015); }
+  .grp-edit-cell { padding:4px 5px; }
+  .grp-edit-cell input { width:100%; min-width:56px; text-align:center; padding:4px 3px; font-size:11px; }
 </style>
 </head>
 <body>
@@ -175,7 +177,7 @@ const GUIDE_SECTIONS = [
 /* =====================================================
    집단편성표 데이터 — 첫 칸은 행 라벨, 나머지 8칸은 각 집단(그룹)
 ===================================================== */
-const GROUP_DATA = {
+const DEFAULT_GROUP_DATA = {
   columns: ["집단","사랑","기름","평화","진절","선함","믿음","온화","자제"],
   supervisor: ["감독자","정건영","한용준","김대윤","전진","김경국","조민우","서진영","이대식"],
   assistant:  ["보조자","정규식","전영선","박사용","배종민","김보현","김보현","김태용","윤기현"],
@@ -219,9 +221,11 @@ let appState  = { mode:'offline', attendance:{} };
 let attLog    = loadLS('mg_att_log', []);
 let seatData  = loadLS('mg_seats', {});
 let MEMBERS = loadLS('mg_members', DEFAULT_MEMBERS.slice());
+let GROUP_DATA = loadLS('mg_group_data', JSON.parse(JSON.stringify(DEFAULT_GROUP_DATA)));
 let editingMemberIndex = null;
 let editingAttLogIndex = null;
 let editingAttAttendance = {};
+let groupEditMode = false;
 
 /* ── Seating state ── */
 let activeId = null;
@@ -856,7 +860,15 @@ function hideChartTooltip(){ document.getElementById('chart-tooltip').classList.
 
 /* ══ TAB 5 — Group Assignment (집단편성표) ══ */
 // 참석확인 탭의 appState.attendance를 그대로 공유해 두 탭의 참석 현황이 항상 연동된다
-function groupCell(name){
+function escAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function groupCell(name, kind, ri, ci){
+  if(groupEditMode){
+    const v=escAttr(name||'');
+    return `<td class="grp-edit-cell"><input type="text" value="${v}" placeholder="-"
+      onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){this.value=this.defaultValue;this.blur();}"
+      onchange="updateGroupName('${kind}',${ri===null?'null':ri},${ci},this.value)"></td>`;
+  }
   if(!name) return '<td class="grp-cell grp-empty"></td>';
   const irregular = /^\(.*\)$/.test(name);
   const att = appState.attendance[name];
@@ -875,16 +887,51 @@ function renderGroupTab(){
     }).join('')+'</tr></thead>';
 
   let body='<tr class="grp-sup-row"><td class="grp-rownum">'+GROUP_DATA.supervisor[0]+'</td>'+
-    GROUP_DATA.supervisor.slice(1).map(name=>groupCell(name)).join('')+'</tr>';
+    GROUP_DATA.supervisor.slice(1).map((name,ci)=>groupCell(name,'sup',null,ci)).join('')+'</tr>';
   body+='<tr class="grp-asst-row"><td class="grp-rownum">'+GROUP_DATA.assistant[0]+'</td>'+
-    GROUP_DATA.assistant.slice(1).map(name=>groupCell(name)).join('')+'</tr>';
+    GROUP_DATA.assistant.slice(1).map((name,ci)=>groupCell(name,'asst',null,ci)).join('')+'</tr>';
   GROUP_DATA.rows.forEach((row,ri)=>{
     body+=`<tr${ri===0?' class="grp-first-row"':''}><td class="grp-rownum">${row[0]}</td>`+
-      row.slice(1).map(name=>groupCell(name)).join('')+'</tr>';
+      row.slice(1).map((name,ci)=>groupCell(name,'row',ri,ci)).join('')+'</tr>';
   });
 
   table.innerHTML=thead+'<tbody>'+body+'</tbody>';
   updateGroupSummary();
+}
+
+function groupDataHasName(name){
+  if(GROUP_DATA.supervisor.includes(name)) return true;
+  if(GROUP_DATA.assistant.includes(name)) return true;
+  return GROUP_DATA.rows.some(row=>row.includes(name));
+}
+
+function toggleGroupEditMode(){
+  groupEditMode=!groupEditMode;
+  const btn=document.getElementById('grp-edit-btn');
+  if(btn) btn.textContent=groupEditMode?'편집 완료':'이름 편집';
+  const hint=document.getElementById('grp-hint');
+  if(hint) hint.textContent=groupEditMode
+    ? '이름을 수정한 후 Enter 또는 다른 곳을 클릭하면 저장됩니다. 비워두면 삭제됩니다.'
+    : '이름을 클릭하면 참석 체크가 토글됩니다 (참석 확인 탭과 실시간 연동)';
+  renderGroupTab();
+}
+
+function updateGroupName(kind, ri, ci, newValRaw){
+  const newVal=newValRaw.trim();
+  const oldVal = kind==='sup' ? GROUP_DATA.supervisor[ci+1]
+               : kind==='asst' ? GROUP_DATA.assistant[ci+1]
+               : GROUP_DATA.rows[ri][ci+1];
+  if(newVal===oldVal) return;
+  if(kind==='sup') GROUP_DATA.supervisor[ci+1]=newVal;
+  else if(kind==='asst') GROUP_DATA.assistant[ci+1]=newVal;
+  else GROUP_DATA.rows[ri][ci+1]=newVal;
+  saveLS('mg_group_data', GROUP_DATA);
+  // 오타 수정처럼 이름만 바뀐 경우, 다른 칸에 같은 이름이 남아있지 않을 때만 참석 상태를 새 이름으로 옮긴다
+  if(oldVal && newVal && appState.attendance[oldVal]!==undefined && !groupDataHasName(oldVal)){
+    appState.attendance[newVal]=appState.attendance[oldVal];
+    delete appState.attendance[oldVal];
+  }
+  renderGroupTab(); updateAttSummary();
 }
 
 function updateGroupSummary(){
@@ -1113,10 +1160,11 @@ document.addEventListener('DOMContentLoaded',()=>{
         <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">집단편성표 참석 체크</div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <span id="grp-rate" style="font-size:12px;color:rgba(255,255,255,0.5)">전체 참석률 0% (0/0명)</span>
+          <button onclick="toggleGroupEditMode()" id="grp-edit-btn" class="btn-sm" style="font-size:12px;padding:5px 12px">이름 편집</button>
           <button onclick="saveAttendance()" class="btn-primary px-4 py-1.5 rounded-lg" style="font-size:12px;font-weight:500">참석 현황 저장</button>
         </div>
       </div>
-      <p style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:12px">이름을 클릭하면 참석 체크가 토글됩니다 (참석 확인 탭과 실시간 연동) · <span style="opacity:.6;font-style:italic">(괄호)</span>는 비정규 멤버</p>
+      <p id="grp-hint" style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:12px">이름을 클릭하면 참석 체크가 토글됩니다 (참석 확인 탭과 실시간 연동) · <span style="opacity:.6;font-style:italic">(괄호)</span>는 비정규 멤버</p>
       <div class="grp-wrap">
         <table id="grp-table" class="grp-table"></table>
       </div>
