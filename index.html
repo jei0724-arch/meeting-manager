@@ -974,8 +974,36 @@ function saveEditAttLog(i){
   showToast('✓ 수정되었습니다');
 }
 function cancelEditAttLog(){ editingAttLogIndex=null; editingAttAttendance={}; renderAttHistory(); }
-function clearAttLog(){ if(!attLog.length) return; if(!confirm('참석 기록을 모두 삭제할까요?')) return; attLog=[]; saveLS('mg_att_log',attLog); renderRecentLog(); renderAttHistory(); showToast('삭제되었습니다'); }
-function deleteAttLog(i){ if(!confirm(attLog[i].date+' 기록을 삭제할까요?')) return; attLog.splice(i,1); saveLS('mg_att_log',attLog); editingAttLogIndex=null; editingAttAttendance={}; renderRecentLog(); renderAttHistory(); showToast('삭제되었습니다'); }
+/* 참석 기록을 지울 때, 같은 날 저장된 좌석 배치 기록(mg_seat_log)도 함께 지워서
+   좌석 통계가 지워진 참석 기록을 계속 반영하는 일이 없도록 한다.
+   그 날짜로 참석 기록을 저장한 적이 없는 좌석 배치(별도로만 저장한 경우)는 건드리지 않는다. */
+function removeSeatLogForDays(dayKeys){
+  if(!dayKeys.length) return;
+  const keep=new Set(dayKeys);
+  const sl=loadLS('mg_seat_log',[]);
+  const filtered=sl.filter(s=>!keep.has(new Date(s.timestamp).toDateString()));
+  if(filtered.length!==sl.length) saveLS('mg_seat_log', filtered);
+}
+function clearAttLog(){
+  if(!attLog.length) return;
+  if(!confirm('참석 기록을 모두 삭제할까요? (해당 날짜에 저장된 좌석 배치 기록도 함께 삭제됩니다)')) return;
+  const dayKeys=attLog.map(log=>new Date(log.timestamp).toDateString());
+  attLog=[];
+  saveLS('mg_att_log',attLog);
+  removeSeatLogForDays(dayKeys);
+  renderRecentLog(); renderAttHistory(); renderStats();
+  showToast('삭제되었습니다');
+}
+function deleteAttLog(i){
+  const log=attLog[i];
+  if(!confirm(log.date+' 기록을 삭제할까요? (그날 저장된 좌석 배치 기록도 함께 삭제됩니다)')) return;
+  attLog.splice(i,1);
+  saveLS('mg_att_log',attLog);
+  removeSeatLogForDays([new Date(log.timestamp).toDateString()]);
+  editingAttLogIndex=null; editingAttAttendance={};
+  renderRecentLog(); renderAttHistory(); renderStats();
+  showToast('삭제되었습니다');
+}
 
 /* ══ TAB 4 — Stats ══ */
 function renderStats(){
