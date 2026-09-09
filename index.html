@@ -303,6 +303,7 @@ function applyCloudState(state){
 
 function rerenderAfterSync(){
   const vis = id => { const el=document.getElementById(id); return el && el.style.display!=='none'; };
+  try{ dedupeAttLogByDay(); }catch{}
   try{ renderMemberList(); }catch{}
   try{ updateAttSummary(); }catch{}
   try{ renderRecentLog(); }catch{}
@@ -594,6 +595,24 @@ function saveAttendance(){
   attLog.sort((a,b)=>b.timestamp-a.timestamp);
   saveLS('mg_att_log',attLog);
   renderRecentLog(); renderHistory(); showToast('✓ 참석 기록이 저장되었습니다');
+}
+
+/* 하루 1건 정책이 생기기 전에 이미 쌓여있던, 같은 날짜 중복 기록을 정리한다.
+   (같은 날짜는 가장 최근 것만 남김) 동기화로 최신 attLog를 받은 직후 호출된다. */
+function dedupeAttLogByDay(){
+  const seen=new Set();
+  const deduped=[];
+  let changed=false;
+  attLog.slice().sort((a,b)=>b.timestamp-a.timestamp).forEach(log=>{
+    const key=new Date(log.timestamp).toDateString();
+    if(seen.has(key)){ changed=true; return; }
+    seen.add(key);
+    deduped.push(log);
+  });
+  if(changed){
+    attLog=deduped;
+    saveLS('mg_att_log',attLog);
+  }
 }
 function renderRecentLog(){
   const el=document.getElementById('recent-log');
@@ -960,6 +979,7 @@ function deleteAttLog(i){ if(!confirm(attLog[i].date+' 기록을 삭제할까요
 
 /* ══ TAB 4 — Stats ══ */
 function renderStats(){
+  dedupeAttLogByDay();
   renderSeatStats();
   const empty=document.getElementById('stats-empty');
   const content=document.getElementById('stats-content');
