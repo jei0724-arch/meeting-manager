@@ -40,6 +40,12 @@
   .hseat.occ-off { background:rgba(127,119,221,0.15); border-color:rgba(127,119,221,0.5); }
   .hseat.occ-zm  { background:rgba(186,117,23,0.15);  border-color:rgba(186,117,23,0.5); }
   .hseat.active-sel { border:2px solid #378ADD !important; background:rgba(55,138,221,0.12) !important; }
+  @keyframes seatFoundPulse { 0%,100%{ box-shadow:0 0 0 0 rgba(93,202,165,0.55); } 50%{ box-shadow:0 0 0 7px rgba(93,202,165,0); } }
+  .hseat.seat-found { border-color:#5DCAA5 !important; animation:seatFoundPulse 0.9s ease-out 2; z-index:1; }
+  body.seat-history-mode .hseat { cursor:default; }
+  body.seat-history-mode .hseat:hover { border-color:rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); }
+  body.seat-history-mode .hseat.occ-off:hover { background:rgba(127,119,221,0.15); }
+  body.seat-history-mode .hseat.occ-zm:hover  { background:rgba(186,117,23,0.15); }
   .hseat .sn { font-weight:500; line-height:1.2; text-align:center; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   .hseat.occ-off .sn { color:#AFA9EC; }
   .hseat.occ-zm  .sn { color:#FAC775; }
@@ -308,6 +314,7 @@ function rerenderAfterSync(){
   try{ updateAttSummary(); }catch{}
   try{ renderRecentLog(); }catch{}
   try{ buildQChips(); }catch{}
+  try{ populateSeatHistorySelect(); }catch{}
   try{ if(vis('member-manager')) renderMemberManageList(); }catch{}
   try{ if(vis('pp-history')) renderHistory(); }catch{}
   try{ if(vis('pp-stats'))   renderStats(); }catch{}
@@ -435,6 +442,8 @@ let groupEditMode = false;
 /* ── Seating state ── */
 let activeId = null;
 let curType  = 'offline';
+let viewingSnapshot = null; // null이면 실시간 좌석 배치, 값이 있으면 그 과거 스냅샷을 읽기 전용으로 보는 중
+function seatSourceData(){ return viewingSnapshot ? viewingSnapshot.data : seatData; }
 
 /* ── Tab ── */
 function switchTab(name){
@@ -687,7 +696,7 @@ function buildHallInto(hallId, wrapId, sections){
         el.className='hseat'; el.id='hs-'+key;
         el.style.width=sz+'px';
         el.style.height=Math.floor(sz*0.88)+'px';
-        el.onclick=()=>openSeatPanel(key,sec.label,r+1,c+1);
+        el.onclick=()=>{ if(!viewingSnapshot) openSeatPanel(key,sec.label,r+1,c+1); };
         // store size for renderOneSeat
         el.dataset.fs=fontSize; el.dataset.sf=subFont; el.dataset.se=Math.floor(sz*0.4);
         renderOneSeat(el,key);
@@ -700,12 +709,17 @@ function buildHallInto(hallId, wrapId, sections){
 }
 
 function buildHall(){
+  populateSeatHistorySelect();
+  const findList=document.getElementById('seat-find-datalist');
+  if(findList) findList.innerHTML=MEMBERS.map(n=>`<option value="${escAttr(n)}">`).join('');
   buildHallInto('hall','hall-wrap',HALL_SECTIONS);
   buildHallInto('hall2','hall2-wrap',EXTRA_SECTIONS);
   buildHallInto('hall3','hall3-wrap',SOUND_SECTIONS);
   buildHallInto('hall4','hall4-wrap',NURSING_SECTIONS);
   buildHallInto('hall5','hall5-wrap',GUIDE_SECTIONS);
   updateSeatSummary();
+  const findInput=document.getElementById('seat-find-input');
+  if(findInput && findInput.value.trim()) findSeatByName(findInput.value); // 배치를 다시 그려도 검색 중이던 이름은 계속 강조
   // 연단 너비를 hall과 동일하게
   setTimeout(()=>{
     const h=document.getElementById('hall');
@@ -771,7 +785,7 @@ let _resizeTimer;
 window.addEventListener('resize', ()=>{ clearTimeout(_resizeTimer); _resizeTimer=setTimeout(buildHall,150); });
 
 function renderOneSeat(el,key){
-  const d=seatData[key];
+  const d=seatSourceData()[key];
   const fs=el.dataset.fs||9;
   const sf=el.dataset.sf||7;
   const se=el.dataset.se||14;
@@ -892,12 +906,82 @@ function saveSeatSnapshot(){
   if(!all.length){ showToast('배정된 자리가 없습니다'); return; }
   const now=new Date();
   const ds=now.toLocaleDateString('ko-KR')+' '+now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-  let sl=loadLS('mg_seat_log',[]); sl.unshift({date:ds,data:seatData,timestamp:now.getTime()});
-  saveLS('mg_seat_log',sl); showToast('✓ 자리 배치가 저장되었습니다');
+  let sl=loadLS('mg_seat_log',[]);
+  // seatData를 그대로 참조하면 이후 자리를 옮길 때마다 이미 저장된 과거 기록까지 같이 바뀌어버리므로 복사해서 저장한다
+  sl.unshift({date:ds,data:JSON.parse(JSON.stringify(seatData)),timestamp:now.getTime()});
+  saveLS('mg_seat_log',sl);
+  populateSeatHistorySelect();
+  showToast('✓ 자리 배치가 저장되었습니다');
+}
+
+/* ── 저장된 좌석 배치 기록을 실제 좌석 배치도로 보기 ── */
+function populateSeatHistorySelect(){
+  const sel=document.getElementById('seat-history-select');
+  if(!sel) return;
+  const sl=loadLS('mg_seat_log',[]);
+  const currentValue=viewingSnapshot?String(viewingSnapshot.timestamp):'';
+  sel.innerHTML='<option value="">현재 배치(실시간)</option>'+
+    sl.map(snap=>`<option value="${snap.timestamp}">${escAttr(snap.date)}</option>`).join('');
+  sel.value=currentValue;
+  // 보고 있던 기록이 (다른 기기에서) 삭제됐으면 자동으로 실시간 배치로 돌아간다
+  if(viewingSnapshot && sel.value!==currentValue) exitSeatSnapshot();
+}
+
+function viewSeatSnapshot(tsRaw){
+  if(!tsRaw){ exitSeatSnapshot(); return; }
+  const sl=loadLS('mg_seat_log',[]);
+  const snap=sl.find(s=>String(s.timestamp)===String(tsRaw));
+  if(!snap) return;
+  viewingSnapshot=snap;
+  document.body.classList.add('seat-history-mode');
+  const banner=document.getElementById('seat-history-banner');
+  if(banner){ banner.style.display='flex'; }
+  const dateEl=document.getElementById('seat-history-banner-date');
+  if(dateEl) dateEl.textContent=snap.date;
+  const liveActions=document.getElementById('seat-live-actions');
+  if(liveActions) liveActions.style.display='none';
+  if(activeId){
+    const prev=document.getElementById('hs-'+activeId);
+    if(prev) prev.classList.remove('active-sel');
+    activeId=null;
+  }
+  const panel=document.getElementById('seat-panel');
+  if(panel) panel.style.display='none';
+  document.querySelectorAll('.hseat.seat-found').forEach(el=>el.classList.remove('seat-found'));
+  buildHall();
+}
+
+function exitSeatSnapshot(){
+  viewingSnapshot=null;
+  document.body.classList.remove('seat-history-mode');
+  const banner=document.getElementById('seat-history-banner');
+  if(banner) banner.style.display='none';
+  const liveActions=document.getElementById('seat-live-actions');
+  if(liveActions) liveActions.style.display='flex';
+  const sel=document.getElementById('seat-history-select');
+  if(sel) sel.value='';
+  document.querySelectorAll('.hseat.seat-found').forEach(el=>el.classList.remove('seat-found'));
+  buildHall();
+}
+
+/* 이름을 입력하면 지금 보고 있는 배치도(실시간 또는 과거 기록)에서 그 사람이 앉은
+   실제 좌석을 찾아 화면을 스크롤하고 강조 표시한다 — 문자 설명이 아니라 실제 자리로 보여준다 */
+function findSeatByName(nameRaw){
+  document.querySelectorAll('.hseat.seat-found').forEach(el=>el.classList.remove('seat-found'));
+  const name=nameRaw.trim();
+  if(!name) return;
+  const data=seatSourceData();
+  const key=Object.keys(data).find(k=>data[k] && data[k].name && data[k].name.includes(name));
+  if(!key){ return; }
+  const el=document.getElementById('hs-'+key);
+  if(!el) return;
+  el.classList.add('seat-found');
+  el.scrollIntoView({behavior:'smooth', block:'center', inline:'center'});
+  setTimeout(()=>el.classList.remove('seat-found'), 1900);
 }
 
 function updateSeatSummary(){
-  const all=Object.values(seatData);
+  const all=Object.values(seatSourceData());
   const el=document.getElementById('seat-summary');
   if(!all.length){ el.innerHTML='<span style="font-size:12px;color:rgba(255,255,255,0.3)">배정된 자리가 없습니다</span>'; return; }
   const off=all.filter(s=>s.type==='offline');
@@ -982,7 +1066,7 @@ function removeSeatLogForDays(dayKeys){
   const keep=new Set(dayKeys);
   const sl=loadLS('mg_seat_log',[]);
   const filtered=sl.filter(s=>!keep.has(new Date(s.timestamp).toDateString()));
-  if(filtered.length!==sl.length) saveLS('mg_seat_log', filtered);
+  if(filtered.length!==sl.length){ saveLS('mg_seat_log', filtered); populateSeatHistorySelect(); }
 }
 function clearAttLog(){
   if(!attLog.length) return;
@@ -1573,12 +1657,24 @@ document.addEventListener('DOMContentLoaded',()=>{
           <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,0.45)"><div style="width:9px;height:9px;border-radius:50%;background:#BA7517"></div>줌</div>
           <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,0.45)"><div style="width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,0.12)"></div>빈 자리</div>
         </div>
-        <div style="display:flex;gap:6px">
+        <div id="seat-live-actions" style="display:flex;gap:6px">
           <button onclick="saveSeatSnapshot()" class="btn-sm">배치 저장</button>
           <button onclick="clearAllSeats()" class="btn-sm danger">전체 초기화</button>
         </div>
       </div>
       <div style="font-size:11px;color:rgba(255,255,255,0.3);margin:-8px 0 12px">"배치 저장"을 누르면 이 자리 배치가 기록되어, 통계 탭에서 회원별로 어느 자리에 자주 앉았는지 볼 수 있습니다</div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <select id="seat-history-select" onchange="viewSeatSnapshot(this.value)" style="font-size:12px;height:32px">
+          <option value="">현재 배치(실시간)</option>
+        </select>
+        <input type="text" id="seat-find-input" list="seat-find-datalist" placeholder="🔍 이름으로 실제 자리 찾기" oninput="findSeatByName(this.value)" style="font-size:12px;height:32px;flex:1;min-width:160px;max-width:260px">
+        <datalist id="seat-find-datalist"></datalist>
+      </div>
+      <div id="seat-history-banner" style="display:none;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:8px 12px;border-radius:7px;background:rgba(55,138,221,0.1);border:0.5px solid rgba(55,138,221,0.3);font-size:12px;color:#7EC8E3">
+        <span>📅 <strong id="seat-history-banner-date"></strong> 저장된 배치입니다 (읽기 전용 — 자리를 눌러도 바뀌지 않습니다)</span>
+        <button onclick="exitSeatSnapshot()" class="btn-sm" style="font-size:11px;padding:3px 10px">실시간 배치로 돌아가기</button>
+      </div>
 
       <!-- 별실(좌측)과 수유실+음향조정석(우측)을 같은 높이로 좌우 배치 -->
       <div style="display:grid;margin-bottom:22px">
