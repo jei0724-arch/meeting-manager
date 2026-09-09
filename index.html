@@ -183,6 +183,15 @@ const GUIDE_SECTIONS = [
   { id:'U', label:'안내인', cols:2, rows:1 },
 ];
 
+// 좌석 통계에서 자리 키("구역-행-열")를 사람이 읽을 수 있는 이름으로 바꿀 때 쓰는 전체 구역 목록
+const ALL_SEAT_SECTIONS = [...HALL_SECTIONS, ...EXTRA_SECTIONS, ...SOUND_SECTIONS, ...NURSING_SECTIONS, ...GUIDE_SECTIONS];
+function seatKeyLabel(seatKey){
+  const parts=seatKey.split('-');
+  const sec=ALL_SEAT_SECTIONS.find(s=>s.id===parts[0]);
+  if(!sec || parts.length<3) return seatKey;
+  return sec.label+' '+(Number(parts[1])+1)+'행 '+(Number(parts[2])+1)+'열';
+}
+
 /* =====================================================
    집단편성표 데이터 — 첫 칸은 행 라벨, 나머지 8칸은 각 집단(그룹)
 ===================================================== */
@@ -455,6 +464,13 @@ function toggleMember(name){
 }
 function selectAll(){ MEMBERS.forEach(n=>{ appState.attendance[n]=appState.mode; }); renderMemberList(); updateAttSummary(); renderGroupTab(); saveAppState(); }
 function clearAll() { appState.attendance={}; renderMemberList(); updateAttSummary(); renderGroupTab(); saveAppState(); }
+
+function resetGroupAttendance(){
+  if(!Object.keys(appState.attendance).length){ showToast('초기화할 체크가 없습니다'); return; }
+  if(!confirm('집단편성표의 참석 체크를 모두 초기화할까요? (참석 확인 탭 체크와 함께 지워집니다)')) return;
+  clearAll();
+  showToast('✓ 참석 체크가 초기화되었습니다');
+}
 function renderMemberList(){
   const el=document.getElementById('member-list');
   el.innerHTML=MEMBERS.map(name=>{
@@ -932,6 +948,7 @@ function deleteAttLog(i){ if(!confirm(attLog[i].date+' 기록을 삭제할까요
 
 /* ══ TAB 4 — Stats ══ */
 function renderStats(){
+  renderSeatStats();
   const empty=document.getElementById('stats-empty');
   const content=document.getElementById('stats-content');
   if(!attLog.length){ empty.style.display='block'; content.style.display='none'; return; }
@@ -1004,6 +1021,56 @@ function renderRankList(ranking){
     const countEl=document.createElement('span'); countEl.className='rank-count'; countEl.textContent=count+'회';
     row.append(nameEl,track,countEl);
     el.appendChild(row);
+  });
+}
+
+/* "배치 저장"으로 쌓인 mg_seat_log(자리 배치 스냅샷들)를 바탕으로
+   회원별로 몇 번 앉았는지, 가장 자주 앉은 자리가 어디인지 집계한다. */
+function renderSeatStats(){
+  const empty=document.getElementById('seat-stats-empty');
+  const list=document.getElementById('seat-stats-list');
+  const label=document.getElementById('seat-stat-count-label');
+  if(!empty || !list) return;
+
+  const seatLog=loadLS('mg_seat_log', []);
+  if(!seatLog.length){
+    empty.style.display='block'; list.style.display='none';
+    if(label) label.textContent='';
+    return;
+  }
+  empty.style.display='none'; list.style.display='block';
+  if(label) label.textContent=seatLog.length+'회 저장됨';
+
+  const perMember={};
+  seatLog.forEach(snap=>{
+    Object.entries(snap.data||{}).forEach(([seatKey,info])=>{
+      if(!info || !info.name) return;
+      const m=perMember[info.name] || (perMember[info.name]={ total:0, seats:{} });
+      m.total++;
+      m.seats[seatKey]=(m.seats[seatKey]||0)+1;
+    });
+  });
+
+  const ranking=Object.entries(perMember).sort((a,b)=>b[1].total-a[1].total);
+  if(!ranking.length){ list.innerHTML=''; return; }
+  const max=ranking[0][1].total;
+
+  list.innerHTML='';
+  ranking.forEach(([name,info])=>{
+    const topSeat=Object.entries(info.seats).sort((a,b)=>b[1]-a[1])[0];
+    const pct=Math.round(info.total/max*100);
+    const row=document.createElement('div'); row.className='rank-row';
+    const nameEl=document.createElement('span'); nameEl.className='rank-name'; nameEl.textContent=name;
+    const track=document.createElement('div'); track.className='rank-bar-track';
+    const fill=document.createElement('div'); fill.className='rank-bar-fill'; fill.style.width=pct+'%';
+    track.appendChild(fill);
+    const countEl=document.createElement('span'); countEl.className='rank-count'; countEl.textContent=info.total+'회';
+    row.append(nameEl,track,countEl);
+    list.appendChild(row);
+    const sub=document.createElement('div');
+    sub.style.cssText='font-size:11px;color:rgba(255,255,255,0.35);margin:-2px 0 8px 74px';
+    sub.textContent='자주 앉은 자리: '+seatKeyLabel(topSeat[0])+' ('+topSeat[1]+'회)';
+    list.appendChild(sub);
   });
 }
 
@@ -1390,6 +1457,7 @@ document.addEventListener('DOMContentLoaded',()=>{
           <button onclick="clearAllSeats()" class="btn-sm danger">전체 초기화</button>
         </div>
       </div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.3);margin:-8px 0 12px">"배치 저장"을 누르면 이 자리 배치가 기록되어, 통계 탭에서 회원별로 어느 자리에 자주 앉았는지 볼 수 있습니다</div>
 
       <!-- 별실(좌측)과 수유실+음향조정석(우측)을 같은 높이로 좌우 배치 -->
       <div style="display:grid;margin-bottom:22px">
@@ -1508,6 +1576,15 @@ document.addEventListener('DOMContentLoaded',()=>{
         <div id="rank-list" style="max-height:420px;overflow-y:auto"></div>
       </div>
     </div>
+
+    <div class="glass rounded-xl p-5" style="margin-top:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">회원별 좌석 통계 (저장된 좌석 배치 기준)</div>
+        <span style="font-size:11px;color:rgba(255,255,255,0.3)" id="seat-stat-count-label"></span>
+      </div>
+      <div id="seat-stats-empty" style="display:none;text-align:center;padding:2rem;font-size:13px;color:rgba(255,255,255,0.3)">저장된 좌석 배치가 없습니다. 좌석 배치 탭에서 "배치 저장"을 눌러주세요.</div>
+      <div id="seat-stats-list" style="max-height:420px;overflow-y:auto"></div>
+    </div>
   </div>
 
   <!-- ⑤ 집단편성표 -->
@@ -1524,6 +1601,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         <span id="grp-rate" style="font-size:12px;color:rgba(255,255,255,0.5)">전체 참석률 0% (0/0명)</span>
         <button onclick="toggleGroupAddPanel()" class="btn-sm" style="font-size:12px;padding:5px 12px">+ 집단 추가</button>
         <button onclick="toggleGroupEditMode()" id="grp-edit-btn" class="btn-sm" style="font-size:12px;padding:5px 12px">이름 편집</button>
+        <button onclick="resetGroupAttendance()" class="btn-sm danger" style="font-size:12px;padding:5px 12px">체크 초기화</button>
         <button onclick="saveAttendance()" class="btn-primary px-4 py-1.5 rounded-lg" style="font-size:12px;font-weight:500">참석 현황 저장</button>
       </div>
       <div id="grp-add-panel" class="manual-row" style="display:none;margin-bottom:12px">
