@@ -224,7 +224,7 @@ function saveLS(k,v){
 /* ══ 기기 간 동기화 (PC ↔ 모바일) ══
    모든 저장은 브라우저(localStorage)에 먼저 쓰고, 서버(/api/data)로도 올린다.
    다른 기기는 서버의 rev(변경 번호)가 달라지면 내려받아 화면을 갱신한다. */
-const SYNC_KEYS = ['mg_members','mg_group_data','mg_att_log','mg_seats','mg_seat_log'];
+const SYNC_KEYS = ['mg_members','mg_group_data','mg_att_log','mg_seats','mg_seat_log','mg_att_state'];
 
 let cloudEnabled = true;
 let cloudRev     = Number(localStorage.getItem('mg_cloud_rev') || 0) || 0;
@@ -275,6 +275,7 @@ function applyCloudState(state){
   if(state.mg_group_data)             GROUP_DATA = state.mg_group_data;
   if(Array.isArray(state.mg_att_log)) attLog     = state.mg_att_log;
   if(state.mg_seats)                  seatData   = state.mg_seats;
+  if(state.mg_att_state)              appState   = state.mg_att_state;
   rerenderAfterSync();
 }
 
@@ -397,7 +398,8 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 window.addEventListener('focus',()=>pullCloud());
 window.addEventListener('online',()=>{ if(cloudDirty) pushCloud(); else pullCloud(); });
 
-let appState  = { mode:'offline', attendance:{} };
+let appState  = loadLS('mg_att_state', { mode:'offline', attendance:{} });
+function saveAppState(){ saveLS('mg_att_state', appState); }
 let attLog    = loadLS('mg_att_log', []);
 let seatData  = loadLS('mg_seats', {});
 let MEMBERS = loadLS('mg_members', DEFAULT_MEMBERS.slice());
@@ -424,6 +426,7 @@ function switchTab(name){
 
 /* ══ TAB 1 — Attendance ══ */
 function setMode(m){
+  const modeChanged = appState.mode!==m;
   appState.mode=m;
   const offCss = m==='offline'
     ? 'display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:0.5px solid rgba(127,119,221,0.5);background:rgba(127,119,221,0.12);color:#AFA9EC;font-size:13px;cursor:pointer'
@@ -435,14 +438,15 @@ function setMode(m){
   document.querySelectorAll('.mode-btn-offline').forEach(el=>el.style.cssText=offCss);
   document.querySelectorAll('.mode-btn-zoom').forEach(el=>el.style.cssText=zmCss);
   renderMemberList();
+  if(modeChanged) saveAppState();
 }
 function toggleMember(name){
   if(appState.attendance[name]===appState.mode) delete appState.attendance[name];
   else appState.attendance[name]=appState.mode;
-  renderMemberList(); updateAttSummary(); renderGroupTab();
+  renderMemberList(); updateAttSummary(); renderGroupTab(); saveAppState();
 }
-function selectAll(){ MEMBERS.forEach(n=>{ appState.attendance[n]=appState.mode; }); renderMemberList(); updateAttSummary(); renderGroupTab(); }
-function clearAll() { appState.attendance={}; renderMemberList(); updateAttSummary(); renderGroupTab(); }
+function selectAll(){ MEMBERS.forEach(n=>{ appState.attendance[n]=appState.mode; }); renderMemberList(); updateAttSummary(); renderGroupTab(); saveAppState(); }
+function clearAll() { appState.attendance={}; renderMemberList(); updateAttSummary(); renderGroupTab(); saveAppState(); }
 function renderMemberList(){
   const el=document.getElementById('member-list');
   el.innerHTML=MEMBERS.map(name=>{
@@ -514,7 +518,7 @@ function saveEditMember(i){
   MEMBERS.sort((a,b)=>a.localeCompare(b,'ko'));
   saveMembers();
   if(newName!==oldName){
-    if(appState.attendance[oldName]!==undefined){ appState.attendance[newName]=appState.attendance[oldName]; delete appState.attendance[oldName]; }
+    if(appState.attendance[oldName]!==undefined){ appState.attendance[newName]=appState.attendance[oldName]; delete appState.attendance[oldName]; saveAppState(); }
     let seatsChanged=false;
     Object.keys(seatData).forEach(k=>{ if(seatData[k].name===oldName){ seatData[k].name=newName; seatsChanged=true; } });
     if(seatsChanged) saveLS('mg_seats', seatData);
@@ -530,6 +534,7 @@ function removeMember(i){
   MEMBERS.splice(i,1);
   saveMembers();
   delete appState.attendance[name];
+  saveAppState();
   let seatsChanged=false;
   Object.keys(seatData).forEach(k=>{ if(seatData[k].name===name){ delete seatData[k]; seatsChanged=true; } });
   if(seatsChanged) saveLS('mg_seats', seatData);
@@ -1142,6 +1147,7 @@ function updateGroupName(kind, ri, ci, newValRaw){
   if(oldVal && newVal && appState.attendance[oldVal]!==undefined && !groupDataHasName(oldVal)){
     appState.attendance[newVal]=appState.attendance[oldVal];
     delete appState.attendance[oldVal];
+    saveAppState();
   }
   renderGroupTab(); updateAttSummary();
 }
@@ -1167,7 +1173,7 @@ function updateGroupSummary(){
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 
 document.addEventListener('DOMContentLoaded',()=>{
-  setMode('offline');
+  setMode(appState.mode||'offline');
   renderMemberList(); updateAttSummary(); renderRecentLog(); renderHistory();
   document.getElementById('sp-input').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const n=e.target.value.trim(); if(n) assignSeat(n); }});
   startCloudSync();
