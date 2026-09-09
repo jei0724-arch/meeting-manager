@@ -215,7 +215,163 @@ const GROUP_COLORS = [
 ];
 
 function loadLS(k,d){ try{ return JSON.parse(localStorage.getItem(k))??d; }catch{ return d; } }
-function saveLS(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch{} }
+function saveLS(k,v){
+  try{ localStorage.setItem(k,JSON.stringify(v)); }catch{}
+  if(SYNC_KEYS.includes(k)) scheduleCloudPush();
+}
+
+/* ══ 기기 간 동기화 (PC ↔ 모바일) ══
+   모든 저장은 브라우저(localStorage)에 먼저 쓰고, 서버(/api/data)로도 올린다.
+   다른 기기는 서버의 rev(변경 번호)가 달라지면 내려받아 화면을 갱신한다. */
+const SYNC_KEYS = ['mg_members','mg_group_data','mg_att_log','mg_seats','mg_seat_log'];
+
+let cloudEnabled = true;
+let cloudRev     = Number(localStorage.getItem('mg_cloud_rev') || 0) || 0;
+let cloudDirty   = localStorage.getItem('mg_cloud_dirty') === '1';
+let cloudPushing = false;
+let cloudPushTimer = null;
+let cloudPollTimer = null;
+let cloudFirstPull = true;
+
+function setCloudRev(rev){ cloudRev=rev; try{ localStorage.setItem('mg_cloud_rev', String(rev)); }catch{} }
+function setCloudDirty(v){ cloudDirty=!!v; try{ localStorage.setItem('mg_cloud_dirty', v?'1':'0'); }catch{} }
+
+function setSyncStatus(text, tone){
+  const el=document.getElementById('sync-status');
+  if(!el) return;
+  const color = tone==='ok'   ? 'rgba(93,202,165,0.85)'
+              : tone==='warn' ? 'rgba(250,199,117,0.85)'
+              : 'rgba(255,255,255,0.4)';
+  el.textContent=text;
+  el.style.color=color;
+}
+
+function fmtSyncTime(ms){
+  if(!ms) return '';
+  try{ return new Date(ms).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}); }catch{ return ''; }
+}
+
+function collectLocalState(){
+  const st={};
+  SYNC_KEYS.forEach(k=>{
+    const raw=localStorage.getItem(k);
+    if(raw===null) return;
+    try{ st[k]=JSON.parse(raw); }catch{}
+  });
+  return st;
+}
+
+function applyCloudState(state){
+  SYNC_KEYS.forEach(k=>{
+    if(state[k]===undefined) return;
+    try{ localStorage.setItem(k, JSON.stringify(state[k])); }catch{}
+  });
+  if(Array.isArray(state.mg_members)) MEMBERS    = state.mg_members;
+  if(state.mg_group_data)             GROUP_DATA = state.mg_group_data;
+  if(Array.isArray(state.mg_att_log)) attLog     = state.mg_att_log;
+  if(state.mg_seats)                  seatData   = state.mg_seats;
+  rerenderAfterSync();
+}
+
+function rerenderAfterSync(){
+  const vis = id => { const el=document.getElementById(id); return el && el.style.display!=='none'; };
+  try{ renderMemberList(); }catch{}
+  try{ updateAttSummary(); }catch{}
+  try{ renderRecentLog(); }catch{}
+  try{ buildQChips(); }catch{}
+  try{ if(vis('member-manager')) renderMemberManageList(); }catch{}
+  try{ if(vis('pp-history')) renderHistory(); }catch{}
+  try{ if(vis('pp-stats'))   renderStats(); }catch{}
+  try{ if(vis('pp-seating')) buildHall(); }catch{}
+  try{ if(vis('pp-groups'))  renderGroupTab(); }catch{}
+}
+
+/* 입력 중일 때 원격 데이터를 덮어써 버리면 타이핑이 날아가므로 미룬다 */
+function isEditingNow(){
+  const el=document.activeElement;
+  return !!(el && (el.tagName==='INPUT' || el.tagName==='TEXTAREA' || el.isContentEditable));
+}
+
+function handleCloudUnavailable(reason){
+  if(reason==='not-configured'){
+    cloudEnabled=false;
+    clearInterval(cloudPollTimer);
+    setSyncStatus('이 기기에만 저장됨 (서버 저장소 미연결)','warn');
+  }else{
+    setSyncStatus('동기화 실패 — 이 기기에는 저장됨','warn');
+  }
+}
+
+async function pullCloud(manual){
+  if(!cloudEnabled) return;
+  if(!manual && (cloudDirty || cloudPushing || isEditingNow())) return;
+  try{
+    const res  = await fetch('/api/data',{cache:'no-store'});
+    const json = await res.json();
+    if(!json.ok){ handleCloudUnavailable(json.reason); return; }
+    if(json.state===null){ await pushCloud(); return; }   // 서버가 비어 있으면 이 기기 데이터로 초기화
+    if(json.rev!==cloudRev){
+      if(cloudDirty || cloudPushing || isEditingNow()) return;
+      applyCloudState(json.state);
+      setCloudRev(json.rev);
+      if(manual) showToast('✓ 최신 데이터를 불러왔습니다');
+      else if(!cloudFirstPull) showToast('✓ 다른 기기의 변경사항을 반영했습니다');
+    }else if(manual){
+      showToast('✓ 이미 최신 상태입니다');
+    }
+    cloudFirstPull=false;
+    setSyncStatus('동기화됨 · '+fmtSyncTime(json.updatedAt),'ok');
+  }catch(e){
+    setSyncStatus('오프라인 — 이 기기에는 저장됨','warn');
+  }
+}
+
+async function pushCloud(){
+  if(!cloudEnabled) return;
+  if(cloudPushing){ setCloudDirty(true); return; }
+  cloudPushing=true;
+  setCloudDirty(false);
+  setSyncStatus('저장 중…','busy');
+  try{
+    const res = await fetch('/api/data',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ state: collectLocalState() })
+    });
+    const json = await res.json();
+    if(!json.ok){ setCloudDirty(true); handleCloudUnavailable(json.reason); return; }
+    setCloudRev(json.rev);
+    setSyncStatus('동기화됨 · '+fmtSyncTime(json.updatedAt),'ok');
+  }catch(e){
+    setCloudDirty(true);
+    setSyncStatus('오프라인 — 연결되면 자동으로 저장됩니다','warn');
+  }finally{
+    cloudPushing=false;
+    if(cloudDirty && cloudEnabled) scheduleCloudPush();
+  }
+}
+
+function scheduleCloudPush(){
+  setCloudDirty(true);
+  if(!cloudEnabled) return;
+  clearTimeout(cloudPushTimer);
+  cloudPushTimer=setTimeout(()=>pushCloud(), 700);
+}
+
+function manualSync(){
+  if(!cloudEnabled){ showToast('서버 저장소가 연결되어 있지 않습니다'); return; }
+  if(cloudDirty) pushCloud(); else pullCloud(true);
+}
+
+function startCloudSync(){
+  if(cloudDirty) pushCloud(); else pullCloud();
+  clearInterval(cloudPollTimer);
+  cloudPollTimer=setInterval(()=>{ if(document.visibilityState==='visible') pullCloud(); }, 20000);
+}
+
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pullCloud(); });
+window.addEventListener('focus',()=>pullCloud());
+window.addEventListener('online',()=>{ if(cloudDirty) pushCloud(); else pullCloud(); });
 
 let appState  = { mode:'offline', attendance:{} };
 let attLog    = loadLS('mg_att_log', []);
@@ -990,13 +1146,18 @@ document.addEventListener('DOMContentLoaded',()=>{
   setMode('offline');
   renderMemberList(); updateAttSummary(); renderRecentLog(); renderHistory();
   document.getElementById('sp-input').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const n=e.target.value.trim(); if(n) assignSeat(n); }});
+  startCloudSync();
 });
 </script>
 
 <div class="max-w-6xl mx-auto px-3 py-6" style="box-sizing:border-box;max-width:100%;">
   <div class="mb-7">
     <h1 style="font-size:20px;font-weight:500;letter-spacing:-0.03em">모임 매니저</h1>
-    <p style="font-size:13px;margin-top:4px;color:rgba(255,255,255,0.4)">참석 확인 · 좌석 배치 — 데이터는 브라우저에 자동 저장</p>
+    <p style="font-size:13px;margin-top:4px;color:rgba(255,255,255,0.4)">참석 확인 · 좌석 배치 — 모든 기기에서 같은 데이터가 보입니다</p>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+      <span id="sync-status" style="font-size:11px;color:rgba(255,255,255,0.4)">동기화 확인 중…</span>
+      <button onclick="manualSync()" class="btn-sm" style="font-size:11px;padding:2px 9px">새로고침</button>
+    </div>
   </div>
 
   <div style="display:flex;gap:2px;border-bottom:0.5px solid rgba(255,255,255,0.1);margin-bottom:1.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;scrollbar-width:none;">
