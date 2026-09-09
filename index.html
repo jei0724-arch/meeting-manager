@@ -119,8 +119,15 @@
   .grp-cell.grp-att-off::before, .grp-cell.grp-att-zm::before { content:'✓ '; }
   .grp-cell.grp-irregular { opacity:.5; font-style:italic; }
   .grp-cell.grp-empty { cursor:default; background:rgba(255,255,255,0.015); }
-  .grp-edit-cell { padding:4px 5px; }
-  .grp-edit-cell input { width:100%; min-width:56px; text-align:center; padding:4px 3px; font-size:11px; }
+  .grp-edit-cell { padding:4px 5px; display:flex; align-items:center; gap:3px; }
+  .grp-edit-cell input { width:100%; min-width:48px; text-align:center; padding:4px 3px; font-size:11px; }
+  .grp-drag-handle { touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none; flex-shrink:0; font-size:12px; line-height:1; color:rgba(255,255,255,0.28); padding:2px 1px; }
+  .grp-drag-handle:active { cursor:grabbing; color:rgba(255,255,255,0.6); }
+  td.grp-drag-src { opacity:.35; }
+  td.grp-drop-target { outline:2px dashed #5DCAA5; outline-offset:-2px; background:rgba(93,202,165,0.12); }
+  .grp-drag-ghost { position:fixed; z-index:10001; pointer-events:none; padding:6px 12px; border-radius:8px; background:#1c1c1c; border:0.5px solid rgba(255,255,255,0.2); color:#e8e8e6; font-size:12px; font-weight:600; box-shadow:0 4px 16px rgba(0,0,0,.4); white-space:nowrap; }
+  .grp-th-input { width:100%; background:transparent; border:none; border-bottom:1px solid currentColor; color:inherit; font:inherit; font-weight:600; text-align:center; padding:2px 0; }
+  .grp-th-input:focus { outline:none; }
 </style>
 </head>
 <body>
@@ -1051,9 +1058,12 @@ function hideChartTooltip(){ document.getElementById('chart-tooltip').classList.
 function escAttr(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function groupCell(name, kind, ri, ci){
+  const riAttr = ri===null ? '' : ri;
   if(groupEditMode){
     const v=escAttr(name||'');
-    return `<td class="grp-edit-cell"><input type="text" value="${v}" placeholder="-"
+    return `<td class="grp-edit-cell" data-kind="${kind}" data-ri="${riAttr}" data-ci="${ci}">
+      <span class="grp-drag-handle" onpointerdown="startCellDrag(event)" title="드래그해서 자리 이동">⠿</span>
+      <input type="text" value="${v}" placeholder="-"
       onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){this.value=this.defaultValue;this.blur();}"
       onchange="updateGroupName('${kind}',${ri===null?'null':ri},${ci},this.value)"></td>`;
   }
@@ -1064,6 +1074,94 @@ function groupCell(name, kind, ri, ci){
   return `<td class="${cls}" onclick="toggleMember('${name}')">${name}</td>`;
 }
 
+function getGroupCellValue(pos){
+  if(pos.kind==='sup') return GROUP_DATA.supervisor[pos.ci+1];
+  if(pos.kind==='asst') return GROUP_DATA.assistant[pos.ci+1];
+  return GROUP_DATA.rows[pos.ri][pos.ci+1];
+}
+function setGroupCellValue(pos, val){
+  if(pos.kind==='sup') GROUP_DATA.supervisor[pos.ci+1]=val;
+  else if(pos.kind==='asst') GROUP_DATA.assistant[pos.ci+1]=val;
+  else GROUP_DATA.rows[pos.ri][pos.ci+1]=val;
+}
+function swapGroupCells(a, b){
+  const va=getGroupCellValue(a), vb=getGroupCellValue(b);
+  if(va===vb) return;
+  setGroupCellValue(a, vb);
+  setGroupCellValue(b, va);
+  saveLS('mg_group_data', GROUP_DATA);
+  renderGroupTab();
+  showToast(vb ? '✓ 서로 자리를 바꿨습니다' : '✓ 이동했습니다');
+}
+
+/* 엑셀처럼 셀(사람)을 드래그해서 다른 칸으로 옮기거나 맞바꾼다.
+   포인터 이벤트를 써서 마우스/터치 모두 동일하게 동작한다.
+   드래그 손잡이(⠿)만 반응하게 해서, 모바일에서 표를 가로로 스크롤하는 동작과 겹치지 않게 한다. */
+function startCellDrag(e){
+  e.preventDefault();
+  e.stopPropagation();
+  const srcTd=e.currentTarget.closest('td[data-kind]');
+  if(!srcTd) return;
+  const srcPos={ kind:srcTd.dataset.kind, ri:srcTd.dataset.ri===''?null:Number(srcTd.dataset.ri), ci:Number(srcTd.dataset.ci) };
+  let moved=false, ghost=null;
+  const sx=e.clientX, sy=e.clientY;
+
+  function clearTargets(){ document.querySelectorAll('.grp-drop-target').forEach(el=>el.classList.remove('grp-drop-target')); }
+  function cleanup(){
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onCancel);
+    srcTd.classList.remove('grp-drag-src');
+    clearTargets();
+    if(ghost){ ghost.remove(); ghost=null; }
+  }
+  function onMove(ev){
+    const dx=ev.clientX-sx, dy=ev.clientY-sy;
+    if(!moved && Math.hypot(dx,dy)<6) return;
+    if(!moved){
+      moved=true;
+      srcTd.classList.add('grp-drag-src');
+      ghost=document.createElement('div');
+      ghost.className='grp-drag-ghost';
+      ghost.textContent=getGroupCellValue(srcPos) || '(빈 칸)';
+      document.body.appendChild(ghost);
+    }
+    ghost.style.left=(ev.clientX+14)+'px';
+    ghost.style.top=(ev.clientY+10)+'px';
+    clearTargets();
+    const under=document.elementFromPoint(ev.clientX, ev.clientY);
+    const targetTd=under && under.closest('td[data-kind]');
+    if(targetTd && targetTd!==srcTd) targetTd.classList.add('grp-drop-target');
+  }
+  function onUp(ev){
+    if(moved){
+      const under=document.elementFromPoint(ev.clientX, ev.clientY);
+      const targetTd=under && under.closest('td[data-kind]');
+      if(targetTd && targetTd!==srcTd){
+        swapGroupCells(srcPos, { kind:targetTd.dataset.kind, ri:targetTd.dataset.ri===''?null:Number(targetTd.dataset.ri), ci:Number(targetTd.dataset.ci) });
+      }
+    }
+    cleanup();
+  }
+  function onCancel(){ cleanup(); }
+
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onCancel);
+}
+
+function updateGroupColumnName(ci, newValRaw){
+  const newVal=newValRaw.trim();
+  const oldVal=GROUP_DATA.columns[ci+1];
+  if(!newVal){ showToast('집단 이름은 비울 수 없습니다'); renderGroupTab(); return; }
+  if(newVal===oldVal) return;
+  if(GROUP_DATA.columns.includes(newVal)){ showToast('이미 있는 집단 이름입니다'); renderGroupTab(); return; }
+  GROUP_DATA.columns[ci+1]=newVal;
+  saveLS('mg_group_data', GROUP_DATA);
+  renderGroupTab();
+  showToast('✓ 집단 이름이 변경되었습니다');
+}
+
 function renderGroupTab(){
   const table=document.getElementById('grp-table');
   if(!table) return;
@@ -1071,6 +1169,11 @@ function renderGroupTab(){
   const thead='<thead><tr><th class="grp-th-label">'+GROUP_DATA.columns[0]+'</th>'+
     GROUP_DATA.columns.slice(1).map((name,ci)=>{
       const c=GROUP_COLORS[ci%GROUP_COLORS.length];
+      if(groupEditMode){
+        return `<th style="color:${c.text};background:${c.bg}"><input class="grp-th-input" type="text" value="${escAttr(name)}"
+          onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){this.value=this.defaultValue;this.blur();}"
+          onchange="updateGroupColumnName(${ci},this.value)"><span class="grp-th-count" id="grp-count-${ci}"></span></th>`;
+      }
       return `<th style="color:${c.text};background:${c.bg}">${name}<span class="grp-th-count" id="grp-count-${ci}"></span></th>`;
     }).join('')+'</tr></thead>';
 
@@ -1098,7 +1201,7 @@ function applyGroupEditModeUI(){
   if(btn) btn.textContent=groupEditMode?'편집 완료':'이름 편집';
   const hint=document.getElementById('grp-hint');
   if(hint) hint.textContent=groupEditMode
-    ? '이름을 수정한 후 Enter 또는 다른 곳을 클릭하면 저장됩니다. 비워두면 삭제됩니다.'
+    ? '이름을 수정한 후 Enter 또는 다른 곳을 클릭하면 저장됩니다. 비워두면 삭제됩니다. 집단(맨 위) 이름도 수정할 수 있습니다. ⠿ 를 눌러 드래그하면 자리를 옮기거나 서로 맞바꿀 수 있습니다.'
     : '이름을 클릭하면 참석 체크가 토글됩니다 (참석 확인 탭과 실시간 연동)';
 }
 
