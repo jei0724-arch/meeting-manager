@@ -1095,6 +1095,29 @@ function swapGroupCells(a, b){
   showToast(vb ? '✓ 서로 자리를 바꿨습니다' : '✓ 이동했습니다');
 }
 
+/* 같은 집단(열) 안의 자리 목록(감독자·보조자·1~N번) 순서.
+   같은 집단 안에서 자리를 옮기면 두 자리만 맞바뀌는 게 아니라,
+   목록에서 뽑아 다른 위치에 끼워넣듯 그 사이 자리들이 한 칸씩 밀린다. */
+function groupColumnSlots(){
+  const slots=[{kind:'sup',ri:null},{kind:'asst',ri:null}];
+  GROUP_DATA.rows.forEach((_,ri)=>slots.push({kind:'row',ri}));
+  return slots;
+}
+function moveGroupCellWithinColumn(ci, srcPos, targetPos){
+  const slots=groupColumnSlots();
+  const from=slots.findIndex(s=>s.kind===srcPos.kind && s.ri===srcPos.ri);
+  const to  =slots.findIndex(s=>s.kind===targetPos.kind && s.ri===targetPos.ri);
+  if(from===-1 || to===-1 || from===to) return;
+  const values=slots.map(s=>getGroupCellValue({kind:s.kind, ri:s.ri, ci}));
+  const val=values[from];
+  values.splice(from,1);
+  values.splice(to,0,val);
+  slots.forEach((s,i)=>setGroupCellValue({kind:s.kind, ri:s.ri, ci}, values[i]));
+  saveLS('mg_group_data', GROUP_DATA);
+  renderGroupTab();
+  showToast('✓ 자리를 옮기고 나머지 자리를 밀었습니다');
+}
+
 /* 엑셀처럼 셀(사람)을 드래그해서 다른 칸으로 옮기거나 맞바꾼다.
    포인터 이벤트를 써서 마우스/터치 모두 동일하게 동작한다.
    드래그 손잡이(⠿)만 반응하게 해서, 모바일에서 표를 가로로 스크롤하는 동작과 겹치지 않게 한다. */
@@ -1139,7 +1162,14 @@ function startCellDrag(e){
       const under=document.elementFromPoint(ev.clientX, ev.clientY);
       const targetTd=under && under.closest('td[data-kind]');
       if(targetTd && targetTd!==srcTd){
-        swapGroupCells(srcPos, { kind:targetTd.dataset.kind, ri:targetTd.dataset.ri===''?null:Number(targetTd.dataset.ri), ci:Number(targetTd.dataset.ci) });
+        const targetPos={ kind:targetTd.dataset.kind, ri:targetTd.dataset.ri===''?null:Number(targetTd.dataset.ri), ci:Number(targetTd.dataset.ci) };
+        if(targetPos.ci===srcPos.ci){
+          // 같은 집단 안에서 옮기면: 그 자리에 끼워넣고 나머지를 밀어낸다
+          moveGroupCellWithinColumn(srcPos.ci, srcPos, targetPos);
+        }else{
+          // 다른 집단으로 옮기면: 데이터 유실 없이 두 사람의 자리를 맞바꾼다
+          swapGroupCells(srcPos, targetPos);
+        }
       }
     }
     cleanup();
@@ -1202,7 +1232,7 @@ function applyGroupEditModeUI(){
   if(btn) btn.textContent=groupEditMode?'편집 완료':'이름 편집';
   const hint=document.getElementById('grp-hint');
   if(hint) hint.textContent=groupEditMode
-    ? '이름을 수정한 후 Enter 또는 다른 곳을 클릭하면 저장됩니다. 비워두면 삭제됩니다. 집단(맨 위) 이름도 수정할 수 있습니다. ⠿ 를 눌러 드래그하면 자리를 옮기거나 서로 맞바꿀 수 있습니다.'
+    ? '이름을 수정한 후 Enter 또는 다른 곳을 클릭하면 저장됩니다. 비워두면 삭제됩니다. 집단(맨 위) 이름도 수정할 수 있습니다. ⠿ 를 눌러 드래그: 같은 집단 안에서 옮기면 그 사이 자리들이 밀리고, 다른 집단으로 옮기면 두 사람이 서로 자리를 바꿉니다.'
     : '이름을 클릭하면 참석 체크가 토글됩니다 (참석 확인 탭과 실시간 연동)';
 }
 
