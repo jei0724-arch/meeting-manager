@@ -66,6 +66,11 @@
   .btn-sm:hover { background:rgba(255,255,255,0.08); }
   .btn-sm.danger { color:#F0997B; border-color:rgba(216,90,48,0.4); }
   .btn-sm.danger:hover { background:rgba(216,90,48,0.1); }
+  .period-btn { padding:4px 10px; border-radius:0; }
+  .period-btn:first-child { border-radius:7px 0 0 7px; }
+  .period-btn:last-child { border-radius:0 7px 7px 0; }
+  .period-btn + .period-btn { border-left:none; }
+  .period-btn.active { background:rgba(255,255,255,0.14); color:#e8e8e6; }
   .seat-summary { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; padding-top:10px; border-top:0.5px solid rgba(255,255,255,0.07); }
   .ss { font-size:11px; padding:3px 10px; border-radius:6px; }
   .ss.off { background:rgba(127,119,221,0.15); color:#AFA9EC; }
@@ -579,7 +584,14 @@ function saveAttendance(){
   if(!attendees.length){ showToast('참석자를 먼저 선택해주세요'); return; }
   const now=new Date();
   const ds=now.toLocaleDateString('ko-KR')+' '+now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-  attLog.unshift({date:ds,attendees,timestamp:now.getTime()});
+  const todayKey=now.toDateString();
+  // 참석확인 탭/집단편성표 탭 어느 쪽에서 저장하든 같은 함수를 타므로,
+  // 같은 날 이미 저장된 기록이 있으면 새로 추가하지 않고 최신 내용으로 덮어쓴다(하루 1건만 유지)
+  const existingIdx=attLog.findIndex(log=>new Date(log.timestamp).toDateString()===todayKey);
+  const entry={date:ds,attendees,timestamp:now.getTime()};
+  if(existingIdx>=0) attLog[existingIdx]=entry;
+  else attLog.unshift(entry);
+  attLog.sort((a,b)=>b.timestamp-a.timestamp);
   saveLS('mg_att_log',attLog);
   renderRecentLog(); renderHistory(); showToast('✓ 참석 기록이 저장되었습니다');
 }
@@ -972,25 +984,84 @@ function renderStats(){
   document.getElementById('stat-top').textContent=ranking.length?ranking[0][0]:'-';
   document.getElementById('stat-top-sub').textContent=ranking.length?`${ranking[0][1]}회 참석`:'';
 
-  renderTrendChart(chrono);
+  renderWeekdayWeekend(chrono);
+  renderTrendChart(aggregateByPeriod(chrono, statsPeriod));
   renderRankList(ranking);
 }
 
-function renderTrendChart(chrono){
+/* ── 평일 / 주말 참석 비교 ── */
+function isWeekendTs(ts){ const d=new Date(ts).getDay(); return d===0||d===6; }
+function summarizeLogs(logs){
+  const sessions=logs.length;
+  const total=logs.reduce((s,l)=>s+l.attendees.length,0);
+  const off=logs.reduce((s,l)=>s+l.attendees.filter(([,t])=>t==='offline').length,0);
+  const zm=logs.reduce((s,l)=>s+l.attendees.filter(([,t])=>t==='zoom').length,0);
+  return { sessions, avg: sessions?Math.round(total/sessions*10)/10:0, off, zm };
+}
+function renderWeekdayWeekend(chrono){
+  const grid=document.getElementById('weekday-weekend-grid');
+  if(!grid) return;
+  const weekday=summarizeLogs(chrono.filter(log=>!isWeekendTs(log.timestamp)));
+  const weekend=summarizeLogs(chrono.filter(log=>isWeekendTs(log.timestamp)));
+  const tile=(title,s)=>`<div class="glass rounded-xl stat-tile">
+      <div class="stat-label">${title}</div>
+      <div class="stat-value" style="font-size:18px">${s.sessions?s.avg+'명':'-'}</div>
+      <div class="stat-sub">${s.sessions?`${s.sessions}회 모임 · 오프라인 ${s.off} · 줌 ${s.zm}`:'기록 없음'}</div>
+    </div>`;
+  grid.innerHTML = tile('평일(월~금) 평균 참석', weekday) + tile('주말(토·일) 평균 참석', weekend);
+}
+
+/* ── 일간/주간/월간 집계 ── */
+let statsPeriod='day';
+function aggregateByPeriod(chrono, period){
+  if(period==='day'){
+    return chrono.map(log=>({
+      key:log.timestamp, label:log.date.split(' ')[0],
+      off:log.attendees.filter(([,t])=>t==='offline').length,
+      zm:log.attendees.filter(([,t])=>t==='zoom').length,
+      sessions:1
+    }));
+  }
+  const buckets={};
+  chrono.forEach(log=>{
+    const d=new Date(log.timestamp);
+    let key,label;
+    if(period==='week'){
+      const monday=new Date(d); const dow=(d.getDay()+6)%7; monday.setDate(d.getDate()-dow); monday.setHours(0,0,0,0);
+      key=monday.getTime();
+      label=(monday.getMonth()+1)+'/'+monday.getDate()+' 주';
+    }else{
+      key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      label=d.getFullYear()+'.'+(d.getMonth()+1)+'월';
+    }
+    if(!buckets[key]) buckets[key]={key,label,off:0,zm:0,sessions:0};
+    buckets[key].off+=log.attendees.filter(([,t])=>t==='offline').length;
+    buckets[key].zm+=log.attendees.filter(([,t])=>t==='zoom').length;
+    buckets[key].sessions++;
+  });
+  return Object.values(buckets).sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:0);
+}
+function setStatsPeriod(p){
+  statsPeriod=p;
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.toggle('active', b.dataset.period===p));
+  const chrono=attLog.slice().reverse();
+  renderTrendChart(aggregateByPeriod(chrono, statsPeriod));
+  const table=document.getElementById('trend-table');
+  if(table && table.style.display!=='none') toggleStatsTable('trend', true);
+}
+
+function renderTrendChart(buckets){
   const el=document.getElementById('trend-chart');
-  const maxTotal=Math.max(1, ...chrono.map(log=>log.attendees.length));
+  const maxTotal=Math.max(1, ...buckets.map(b=>b.off+b.zm));
   const maxPx=140;
   el.innerHTML='';
-  chrono.forEach(log=>{
-    const off=log.attendees.filter(([,t])=>t==='offline').length;
-    const zm=log.attendees.filter(([,t])=>t==='zoom').length;
-    const offH=off>0?Math.max(2,Math.round(off/maxTotal*maxPx)):0;
-    const zmH=zm>0?Math.max(2,Math.round(zm/maxTotal*maxPx)):0;
-    const shortDate=log.date.split(' ')[0];
+  buckets.forEach(b=>{
+    const offH=b.off>0?Math.max(2,Math.round(b.off/maxTotal*maxPx)):0;
+    const zmH=b.zm>0?Math.max(2,Math.round(b.zm/maxTotal*maxPx)):0;
 
     const col=document.createElement('div'); col.className='trend-col';
     const wrap=document.createElement('div'); wrap.className='trend-bar-wrap';
-    wrap.onmouseenter=(e)=>showChartTooltip(e,shortDate,off,zm);
+    wrap.onmouseenter=(e)=>showChartTooltip(e,b.label,b.off,b.zm,statsPeriod!=='day'?b.sessions:null);
     wrap.onmousemove=moveChartTooltip;
     wrap.onmouseleave=hideChartTooltip;
     const offSeg=document.createElement('div'); offSeg.className='trend-seg off'; offSeg.style.height=offH+'px';
@@ -999,7 +1070,7 @@ function renderTrendChart(chrono){
     if(zmH>0) zmSeg.style.borderRadius='3px 3px 0 0';
     else if(offH>0) offSeg.style.borderRadius='3px 3px 0 0';
     wrap.append(offSeg,zmSeg);
-    const lbl=document.createElement('div'); lbl.className='trend-col-label'; lbl.textContent=shortDate;
+    const lbl=document.createElement('div'); lbl.className='trend-col-label'; lbl.textContent=b.label;
     col.append(wrap,lbl);
     el.appendChild(col);
   });
@@ -1074,34 +1145,36 @@ function renderSeatStats(){
   });
 }
 
-function toggleStatsTable(which){
+function toggleStatsTable(which, forceRefresh){
   if(which!=='trend') return;
   const chart=document.getElementById('trend-chart');
   const table=document.getElementById('trend-table');
-  const show=table.style.display==='none';
-  table.style.display=show?'block':'none';
-  chart.style.display=show?'none':'flex';
+  const show = forceRefresh ? table.style.display!=='none' : table.style.display==='none';
+  if(!forceRefresh){
+    table.style.display=show?'block':'none';
+    chart.style.display=show?'none':'flex';
+  }
   if(show){
     const chrono=attLog.slice().reverse();
+    const buckets=aggregateByPeriod(chrono, statsPeriod);
     table.innerHTML='';
-    chrono.forEach(log=>{
-      const off=log.attendees.filter(([,t])=>t==='offline').length;
-      const zm=log.attendees.filter(([,t])=>t==='zoom').length;
+    buckets.forEach(b=>{
       const row=document.createElement('div'); row.className='stats-table-row';
-      const c1=document.createElement('span'); c1.textContent=log.date;
-      const c2=document.createElement('span'); c2.textContent='오프라인 '+off;
-      const c3=document.createElement('span'); c3.textContent='줌 '+zm;
-      const c4=document.createElement('span'); c4.textContent='총 '+(off+zm)+'명';
+      const c1=document.createElement('span'); c1.textContent=statsPeriod==='day'?b.label:`${b.label} (${b.sessions}회)`;
+      const c2=document.createElement('span'); c2.textContent='오프라인 '+b.off;
+      const c3=document.createElement('span'); c3.textContent='줌 '+b.zm;
+      const c4=document.createElement('span'); c4.textContent='총 '+(b.off+b.zm)+'명';
       row.append(c1,c2,c3,c4);
       table.appendChild(row);
     });
   }
 }
 
-function showChartTooltip(evt,dateLabel,off,zm){
+function showChartTooltip(evt,dateLabel,off,zm,sessions){
   const t=document.getElementById('chart-tooltip');
   t.innerHTML='';
-  const title=document.createElement('div'); title.className='ct-title'; title.textContent=dateLabel;
+  const title=document.createElement('div'); title.className='ct-title';
+  title.textContent=sessions?`${dateLabel} · ${sessions}회`:dateLabel;
   const row1=document.createElement('div'); row1.className='ct-row';
   const key1=document.createElement('span'); key1.className='ct-key'; key1.style.background='#7F77DD';
   const v1=document.createElement('strong'); v1.textContent=off;
@@ -1555,10 +1628,22 @@ document.addEventListener('DOMContentLoaded',()=>{
         </div>
       </div>
 
+      <div class="glass rounded-xl p-5 mb-4" id="weekday-weekend-card">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3);margin-bottom:12px">평일 · 주말 참석 비교</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.75rem" id="weekday-weekend-grid"></div>
+      </div>
+
       <div class="glass rounded-xl p-5 mb-4">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
-          <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">회차별 참석 인원 추이</div>
-          <button onclick="toggleStatsTable('trend')" class="btn-sm" style="font-size:11px;padding:3px 10px">표로 보기</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;flex-wrap:wrap;gap:8px">
+          <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">참석 인원 추이</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="display:flex">
+              <button onclick="setStatsPeriod('day')" class="btn-sm period-btn active" data-period="day" style="font-size:11px">일간</button>
+              <button onclick="setStatsPeriod('week')" class="btn-sm period-btn" data-period="week" style="font-size:11px">주간</button>
+              <button onclick="setStatsPeriod('month')" class="btn-sm period-btn" data-period="month" style="font-size:11px">월간</button>
+            </div>
+            <button onclick="toggleStatsTable('trend')" class="btn-sm" style="font-size:11px;padding:3px 10px">표로 보기</button>
+          </div>
         </div>
         <div class="legend-row" style="margin-top:12px">
           <div class="legend-item"><span class="legend-swatch" style="background:#7F77DD"></span>오프라인</div>
