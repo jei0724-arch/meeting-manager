@@ -119,7 +119,8 @@
   .grp-cell.grp-att-off::before, .grp-cell.grp-att-zm::before { content:'✓ '; }
   .grp-cell.grp-irregular { opacity:.5; font-style:italic; }
   .grp-cell.grp-empty { cursor:default; background:rgba(255,255,255,0.015); }
-  .grp-edit-cell { padding:4px 5px; display:flex; align-items:center; gap:3px; }
+  .grp-edit-cell { padding:4px 5px; }
+  .grp-edit-cell-inner { display:flex; align-items:center; gap:3px; }
   .grp-edit-cell input { width:100%; min-width:48px; text-align:center; padding:4px 3px; font-size:11px; }
   .grp-drag-handle { touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none; flex-shrink:0; font-size:12px; line-height:1; color:rgba(255,255,255,0.28); padding:2px 1px; }
   .grp-drag-handle:active { cursor:grabbing; color:rgba(255,255,255,0.6); }
@@ -1061,11 +1062,11 @@ function groupCell(name, kind, ri, ci){
   const riAttr = ri===null ? '' : ri;
   if(groupEditMode){
     const v=escAttr(name||'');
-    return `<td class="grp-edit-cell" data-kind="${kind}" data-ri="${riAttr}" data-ci="${ci}">
+    return `<td class="grp-edit-cell" data-kind="${kind}" data-ri="${riAttr}" data-ci="${ci}"><div class="grp-edit-cell-inner">
       <span class="grp-drag-handle" onpointerdown="startCellDrag(event)" title="드래그해서 자리 이동">⠿</span>
       <input type="text" value="${v}" placeholder="-"
       onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){this.value=this.defaultValue;this.blur();}"
-      onchange="updateGroupName('${kind}',${ri===null?'null':ri},${ci},this.value)"></td>`;
+      onchange="updateGroupName('${kind}',${ri===null?'null':ri},${ci},this.value)"></div></td>`;
   }
   if(!name) return '<td class="grp-cell grp-empty"></td>';
   const irregular = /^\(.*\)$/.test(name);
