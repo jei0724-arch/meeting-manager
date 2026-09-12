@@ -511,7 +511,12 @@ function toggleMemberManager(){
   const el=document.getElementById('member-manager');
   const show=el.style.display==='none';
   el.style.display=show?'block':'none';
-  if(show){ editingMemberIndex=null; renderMemberManageList(); }
+  if(show){
+    editingMemberIndex=null;
+    const search=document.getElementById('member-search-input');
+    if(search) search.value='';
+    renderMemberManageList();
+  }
 }
 
 function addMember(){
@@ -530,7 +535,13 @@ function addMember(){
 function renderMemberManageList(){
   const el=document.getElementById('member-manage-list');
   if(!el) return;
-  el.innerHTML=MEMBERS.map((name,i)=>{
+  const query=(document.getElementById('member-search-input')?.value||'').trim();
+  const items=MEMBERS.map((name,i)=>({name,i})).filter(({name})=>!query||name.includes(query));
+  if(!items.length){
+    el.innerHTML=`<div style="text-align:center;padding:1rem;font-size:12px;color:rgba(255,255,255,0.3)">'${escAttr(query)}' 검색 결과가 없습니다</div>`;
+    return;
+  }
+  el.innerHTML=items.map(({name,i})=>{
     if(i===editingMemberIndex){
       return `<div class="manual-row">
         <input id="edit-member-input" type="text" value="${name}" onkeydown="if(event.key==='Enter')saveEditMember(${i});if(event.key==='Escape')cancelEditMember()">
@@ -1710,6 +1721,7 @@ document.addEventListener('DOMContentLoaded',()=>{
               <input id="new-member-input" type="text" placeholder="새 회원 이름" onkeydown="if(event.key==='Enter')addMember()">
               <button onclick="addMember()" class="btn-sm">추가</button>
             </div>
+            <input id="member-search-input" type="text" placeholder="🔍 이름으로 검색" oninput="renderMemberManageList()" style="width:100%;margin-bottom:8px;font-size:12px;height:30px">
             <div id="member-manage-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
           </div>
           <div id="member-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:5px"></div>
