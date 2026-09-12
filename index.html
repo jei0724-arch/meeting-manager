@@ -983,9 +983,11 @@ function updateSeatSummary(){
 /* ══ TAB 3 — History ══ */
 function renderHistory(){ renderAttHistory(); }
 function renderAttHistory(){
+  const dl=document.getElementById('att-hist-search-datalist');
+  if(dl) dl.innerHTML=MEMBERS.map(n=>`<option value="${escAttr(n)}">`).join('');
   const el=document.getElementById('att-hist-list');
-  if(!attLog.length){ el.innerHTML='<div style="text-align:center;padding:2rem;font-size:12px;color:rgba(255,255,255,0.3)">기록 없음</div>'; return; }
-  el.innerHTML=attLog.map((log,i)=>{
+  if(!attLog.length){ el.innerHTML='<div style="text-align:center;padding:2rem;font-size:12px;color:rgba(255,255,255,0.3)">기록 없음</div>'; }
+  else el.innerHTML=attLog.map((log,i)=>{
     if(i===editingAttLogIndex){
       const grid=MEMBERS.map(name=>{
         const st=editingAttAttendance[name];
@@ -1021,6 +1023,40 @@ function renderAttHistory(){
         ${zm.length?`<div><span style="color:#FAC775">● 줌</span> — ${zm.join(', ')}</div>`:''}
       </div></div>`;
   }).join('');
+  const searchInput=document.getElementById('att-hist-search-input');
+  if(searchInput && searchInput.value.trim()) searchAttHistoryByName(searchInput.value);
+}
+function searchAttHistoryByName(q){
+  const query=q.trim();
+  const listEl=document.getElementById('att-hist-list');
+  const resultEl=document.getElementById('att-hist-search-result');
+  if(!query){
+    resultEl.style.display='none'; resultEl.innerHTML='';
+    listEl.style.display='';
+    return;
+  }
+  listEl.style.display='none';
+  resultEl.style.display='block';
+  const matches=[];
+  attLog.forEach(log=>{
+    const found=log.attendees.find(([n])=>n.includes(query));
+    if(found) matches.push({date:log.date, type:found[1]});
+  });
+  if(!matches.length){
+    resultEl.innerHTML=`<div style="text-align:center;padding:2rem;font-size:12px;color:rgba(255,255,255,0.3)">'${escAttr(query)}' 참석 기록이 없습니다</div>`;
+    return;
+  }
+  const offCount=matches.filter(m=>m.type==='offline').length;
+  const zmCount=matches.filter(m=>m.type==='zoom').length;
+  resultEl.innerHTML=
+    `<div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:10px">'${escAttr(query)}' 검색 결과 ${matches.length}건 (오프라인 ${offCount} · 줌 ${zmCount})</div>`+
+    matches.map(m=>{
+      const isOff=m.type==='offline';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:7px;background:rgba(255,255,255,0.03);margin-bottom:6px;font-size:13px">
+        <span>${m.date}</span>
+        <span style="font-size:11px;padding:2px 9px;border-radius:5px;${isOff?'background:rgba(127,119,221,0.15);color:#AFA9EC':'background:rgba(186,117,23,0.15);color:#FAC775'}">${isOff?'🙋 오프라인':'💻 줌'}</span>
+      </div>`;
+    }).join('');
 }
 function startEditAttLog(i){
   editingAttLogIndex=i;
@@ -1723,10 +1759,15 @@ document.addEventListener('DOMContentLoaded',()=>{
   <!-- ③ 히스토리 -->
   <div id="pp-history" class="panel-page" style="display:none">
     <div class="glass rounded-xl p-5">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
         <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">참석 기록</div>
         <button onclick="clearAttLog()" class="btn-sm danger" style="font-size:11px;padding:3px 10px">전체 삭제</button>
       </div>
+      <div style="margin-bottom:12px">
+        <input type="text" id="att-hist-search-input" list="att-hist-search-datalist" placeholder="🔍 이름으로 참석 기록 검색 (오프라인/줌 확인)" oninput="searchAttHistoryByName(this.value)" style="font-size:12px;height:32px;width:100%">
+        <datalist id="att-hist-search-datalist"></datalist>
+      </div>
+      <div id="att-hist-search-result" style="display:none;margin-bottom:12px"></div>
       <div id="att-hist-list" style="max-height:520px;overflow-y:auto"></div>
     </div>
   </div>
