@@ -451,6 +451,7 @@ function switchTab(name){
   document.querySelectorAll('.panel-page').forEach(p=>p.style.display='none');
   document.getElementById('pp-'+name).style.display='block';
   if(name==='seating') buildHall();
+  if(name==='history') renderHistory();
   if(name==='stats')   renderStats();
   if(name==='groups')  renderGroupTab();
 }
