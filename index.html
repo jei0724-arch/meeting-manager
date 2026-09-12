@@ -441,7 +441,6 @@ let groupEditMode = false;
 
 /* ── Seating state ── */
 let activeId = null;
-let curType  = 'offline';
 let viewingSnapshot = null; // null이면 실시간 좌석 배치, 값이 있으면 그 과거 스냅샷을 읽기 전용으로 보는 중
 function seatSourceData(){ return viewingSnapshot ? viewingSnapshot.data : seatData; }
 
@@ -824,21 +823,12 @@ function openSeatPanel(key,secLabel,row,col){
   if(el) el.classList.add('active-sel');
   const d=seatData[key];
   document.getElementById('sp-title').textContent=secLabel+' '+row+'행 '+col+'열';
-  if(d) curType=d.type;
-  setSeatType(curType);
   document.getElementById('sp-input').value=d?d.name:'';
   document.getElementById('sp-clear').style.display=d?'inline-flex':'none';
   const hint=document.getElementById('sp-occupied-hint');
   if(hint){ hint.style.display=d?'block':'none'; if(d) document.getElementById('sp-occupied-name').textContent=d.name; }
   buildQChips();
   document.getElementById('seat-panel').style.display='block';
-}
-
-function setSeatType(t){
-  curType=t;
-  document.getElementById('stype-off').className='type-btn'+(t==='offline'?' sel-off':'');
-  document.getElementById('stype-zm').className='type-btn'+(t==='zoom'?' sel-zm':'');
-  buildQChips();
 }
 
 function buildQChips(){
@@ -854,14 +844,13 @@ function buildQChips(){
     const chip=document.createElement('div');
     chip.className='qchip off-h'+(used.has(name)?' used':'');
     chip.textContent=name;
-    chip.onclick=()=>assignSeat(name,'offline');
+    chip.onclick=()=>assignSeat(name);
     el.appendChild(chip);
   });
 }
 
-function assignSeat(name,type){
+function assignSeat(name){
   if(!activeId) return;
-  if(type){ curType=type; setSeatType(type); }
   // 이미 다른 자리에 배정된 사람이면 기존 자리 비우기
   const prevKey = Object.keys(seatData).find(k => k !== activeId && seatData[k].name === name);
   if(prevKey){
@@ -869,7 +858,7 @@ function assignSeat(name,type){
     const prevEl = document.getElementById('hs-'+prevKey);
     if(prevEl) renderOneSeat(prevEl, prevKey);
   }
-  seatData[activeId]={name,type:curType};
+  seatData[activeId]={name,type:'offline'};
   saveLS('mg_seats',seatData);
   const el=document.getElementById('hs-'+activeId);
   if(el){ el.classList.remove('active-sel'); renderOneSeat(el,activeId); }
@@ -1653,7 +1642,6 @@ document.addEventListener('DOMContentLoaded',()=>{
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
           <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,0.45)"><div style="width:9px;height:9px;border-radius:50%;background:#7F77DD"></div>오프라인</div>
-          <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,0.45)"><div style="width:9px;height:9px;border-radius:50%;background:#BA7517"></div>줌</div>
           <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,0.45)"><div style="width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,0.12)"></div>빈 자리</div>
         </div>
         <div id="seat-live-actions" style="display:flex;gap:6px">
@@ -1720,11 +1708,6 @@ document.addEventListener('DOMContentLoaded',()=>{
 
       <div id="sp-occupied-hint" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:7px;background:rgba(216,90,48,0.1);border:0.5px solid rgba(216,90,48,0.3);font-size:12px;color:#F0997B">
         현재 배정: <span id="sp-occupied-name" style="font-weight:500"></span> — 다른 이름을 클릭하면 교체, 위 버튼을 누르면 비워집니다
-      </div>
-
-      <div class="type-row">
-        <button class="type-btn sel-off" id="stype-off" onclick="setSeatType('offline')">🙋 오프라인</button>
-        <button class="type-btn"         id="stype-zm"  onclick="setSeatType('zoom')">💻 줌</button>
       </div>
 
       <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:8px">이름을 클릭하면 즉시 배정됩니다</div>
