@@ -40,6 +40,8 @@
   .hseat.occ-off { background:rgba(127,119,221,0.15); border-color:rgba(127,119,221,0.5); }
   .hseat.occ-zm  { background:rgba(186,117,23,0.15);  border-color:rgba(186,117,23,0.5); }
   .hseat.active-sel { border:2px solid #378ADD !important; background:rgba(55,138,221,0.12) !important; }
+  @keyframes moveSourcePulse { 0%,100%{ box-shadow:0 0 0 0 rgba(93,202,165,0.55); } 50%{ box-shadow:0 0 0 5px rgba(93,202,165,0.05); } }
+  .hseat.move-source { border:2px dashed #5DCAA5 !important; animation:moveSourcePulse 1.1s ease-in-out infinite; z-index:1; }
   @keyframes seatFoundPulse { 0%,100%{ box-shadow:0 0 0 0 rgba(93,202,165,0.55); } 50%{ box-shadow:0 0 0 7px rgba(93,202,165,0); } }
   .hseat.seat-found { border-color:#5DCAA5 !important; animation:seatFoundPulse 0.9s ease-out 2; z-index:1; }
   body.seat-history-mode .hseat { cursor:default; }
@@ -441,6 +443,7 @@ let groupEditMode = false;
 
 /* ── Seating state ── */
 let activeId = null;
+let moveFromKey = null; // null이 아니면 "이 자리 사람을 다른 자리로 옮기는 중" — 다음 클릭한 자리가 목적지가 된다
 let viewingSnapshot = null; // null이면 실시간 좌석 배치, 값이 있으면 그 과거 스냅샷을 읽기 전용으로 보는 중
 function seatSourceData(){ return viewingSnapshot ? viewingSnapshot.data : seatData; }
 
@@ -696,7 +699,7 @@ function buildHallInto(hallId, wrapId, sections){
         el.className='hseat'; el.id='hs-'+key;
         el.style.width=sz+'px';
         el.style.height=Math.floor(sz*0.88)+'px';
-        el.onclick=()=>{ if(!viewingSnapshot) openSeatPanel(key,sec.label,r+1,c+1); };
+        el.onclick=()=>{ if(!viewingSnapshot) onSeatClick(key,sec.label,r+1,c+1); };
         // store size for renderOneSeat
         el.dataset.fs=fontSize; el.dataset.sf=subFont; el.dataset.se=Math.floor(sz*0.4);
         renderOneSeat(el,key);
@@ -790,9 +793,10 @@ function renderOneSeat(el,key){
   const sf=el.dataset.sf||7;
   const se=el.dataset.se||14;
   const isActive=el.id==='hs-'+activeId;
+  const isMoving=key===moveFromKey;
   el.innerHTML='';
   if(d){
-    el.className='hseat '+(d.type==='zoom'?'occ-zm':'occ-off')+(isActive?' active-sel':'');
+    el.className='hseat '+(d.type==='zoom'?'occ-zm':'occ-off')+(isActive?' active-sel':'')+(isMoving?' move-source':'');
     const n=document.createElement('div'); n.className='sn';
     n.style.fontSize=fs+'px'; n.style.maxWidth=(parseInt(el.style.width||42)-4)+'px';
     n.textContent=d.name;
@@ -801,11 +805,61 @@ function renderOneSeat(el,key){
     t.textContent=d.type==='zoom'?'줌':'오프';
     el.appendChild(n); el.appendChild(t);
   } else {
-    el.className='hseat'+(isActive?' active-sel':'');
+    el.className='hseat'+(isActive?' active-sel':'')+(isMoving?' move-source':'');
     const e=document.createElement('div'); e.className='se';
     e.style.fontSize=se+'px';
     e.textContent='+';
     el.appendChild(e);
+  }
+}
+
+/* 이동 모드 중에는 클릭한 자리가 바로 목적지가 되고, 그 외에는 평소대로 배정 패널을 연다 */
+function onSeatClick(key,secLabel,row,col){
+  if(moveFromKey){ completeMoveSeat(key); return; }
+  openSeatPanel(key,secLabel,row,col);
+}
+
+function startMoveSeat(){
+  if(!activeId || !seatData[activeId]) return;
+  const fromKey=activeId;
+  const name=seatData[fromKey].name;
+  document.getElementById('seat-panel').style.display='none';
+  activeId=null;
+  moveFromKey=fromKey;
+  const el=document.getElementById('hs-'+fromKey);
+  if(el) renderOneSeat(el, fromKey);
+  const banner=document.getElementById('seat-move-banner');
+  if(banner){ document.getElementById('seat-move-name').textContent=name; banner.style.display='flex'; }
+}
+
+function completeMoveSeat(destKey){
+  const fromKey=moveFromKey;
+  moveFromKey=null;
+  const banner=document.getElementById('seat-move-banner');
+  if(banner) banner.style.display='none';
+  const fromEl=document.getElementById('hs-'+fromKey);
+  if(destKey===fromKey){ if(fromEl) renderOneSeat(fromEl, fromKey); return; }
+  const fromData=seatData[fromKey];
+  if(!fromData) return;
+  const destData=seatData[destKey];
+  if(destData) seatData[fromKey]=destData; else delete seatData[fromKey];
+  seatData[destKey]=fromData;
+  saveLS('mg_seats',seatData);
+  const destEl=document.getElementById('hs-'+destKey);
+  if(fromEl) renderOneSeat(fromEl, fromKey);
+  if(destEl) renderOneSeat(destEl, destKey);
+  updateSeatSummary();
+  showToast(destData?'✓ 자리를 맞바꿨습니다':'✓ 자리를 이동했습니다');
+}
+
+function cancelMoveSeat(){
+  const fromKey=moveFromKey;
+  moveFromKey=null;
+  const banner=document.getElementById('seat-move-banner');
+  if(banner) banner.style.display='none';
+  if(fromKey){
+    const el=document.getElementById('hs-'+fromKey);
+    if(el) renderOneSeat(el, fromKey);
   }
 }
 
@@ -826,6 +880,7 @@ function openSeatPanel(key,secLabel,row,col){
   document.getElementById('sp-title').textContent=secLabel+' '+row+'행 '+col+'열';
   document.getElementById('sp-input').value=d?d.name:'';
   document.getElementById('sp-clear').style.display=d?'inline-flex':'none';
+  document.getElementById('sp-move').style.display=d?'inline-flex':'none';
   const hint=document.getElementById('sp-occupied-hint');
   if(hint){ hint.style.display=d?'block':'none'; if(d) document.getElementById('sp-occupied-name').textContent=d.name; }
   buildQChips();
@@ -864,6 +919,7 @@ function assignSeat(name){
   const el=document.getElementById('hs-'+activeId);
   if(el){ el.classList.remove('active-sel'); renderOneSeat(el,activeId); }
   document.getElementById('sp-clear').style.display='inline-flex';
+  document.getElementById('sp-move').style.display='inline-flex';
   document.getElementById('sp-input').value=name;
   const ah=document.getElementById('sp-occupied-hint'); if(ah){ ah.style.display='block'; document.getElementById('sp-occupied-name').textContent=name; }
   updateSeatSummary(); buildQChips();
@@ -876,6 +932,7 @@ function clearSeatEntry(){
   const el=document.getElementById('hs-'+activeId);
   if(el){ el.classList.remove('active-sel'); renderOneSeat(el,activeId); }
   document.getElementById('sp-clear').style.display='none';
+  document.getElementById('sp-move').style.display='none';
   document.getElementById('sp-input').value='';
   const ch=document.getElementById('sp-occupied-hint'); if(ch) ch.style.display='none';
   updateSeatSummary(); buildQChips();
@@ -886,6 +943,7 @@ function clearAllSeats(){
   if(!confirm('모든 자리 배정을 초기화할까요?')) return;
   seatData={}; saveLS('mg_seats',seatData);
   activeId=null;
+  cancelMoveSeat();
   document.getElementById('seat-panel').style.display='none';
   buildHall();
 }
@@ -921,6 +979,7 @@ function viewSeatSnapshot(tsRaw){
   const sl=loadLS('mg_seat_log',[]);
   const snap=sl.find(s=>String(s.timestamp)===String(tsRaw));
   if(!snap) return;
+  cancelMoveSeat();
   viewingSnapshot=snap;
   document.body.classList.add('seat-history-mode');
   const banner=document.getElementById('seat-history-banner');
@@ -1699,6 +1758,10 @@ document.addEventListener('DOMContentLoaded',()=>{
         <span>📅 <strong id="seat-history-banner-date"></strong> 저장된 배치입니다 (읽기 전용 — 자리를 눌러도 바뀌지 않습니다)</span>
         <button onclick="exitSeatSnapshot()" class="btn-sm" style="font-size:11px;padding:3px 10px">실시간 배치로 돌아가기</button>
       </div>
+      <div id="seat-move-banner" style="display:none;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:8px 12px;border-radius:7px;background:rgba(93,202,165,0.1);border:0.5px solid rgba(93,202,165,0.35);font-size:12px;color:#8FE0C2">
+        <span>🔀 <strong id="seat-move-name"></strong> 님을 옮길 자리를 클릭하세요</span>
+        <button onclick="cancelMoveSeat()" class="btn-sm" style="font-size:11px;padding:3px 10px">취소</button>
+      </div>
 
       <!-- 별실(좌측)과 수유실+음향조정석(우측)을 같은 높이로 좌우 배치 -->
       <div style="display:grid;margin-bottom:22px">
@@ -1738,13 +1801,16 @@ document.addEventListener('DOMContentLoaded',()=>{
 
     <!-- 자리 배정 패널 (클릭 즉시 반영) -->
     <div id="seat-panel" class="seat-panel" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
         <div style="font-size:13px;font-weight:500" id="sp-title">자리 배정</div>
-        <button id="sp-clear" onclick="clearSeatEntry()" style="display:none;padding:5px 14px;font-size:12px;font-weight:500;border:1.5px solid rgba(216,90,48,0.6);border-radius:7px;background:rgba(216,90,48,0.15);color:#F0997B;cursor:pointer">✕ 자리 비우기</button>
+        <div style="display:flex;gap:6px">
+          <button id="sp-move" onclick="startMoveSeat()" style="display:none;padding:5px 14px;font-size:12px;font-weight:500;border:1.5px solid rgba(93,202,165,0.6);border-radius:7px;background:rgba(93,202,165,0.15);color:#8FE0C2;cursor:pointer">🔀 다른 자리로 이동</button>
+          <button id="sp-clear" onclick="clearSeatEntry()" style="display:none;padding:5px 14px;font-size:12px;font-weight:500;border:1.5px solid rgba(216,90,48,0.6);border-radius:7px;background:rgba(216,90,48,0.15);color:#F0997B;cursor:pointer">✕ 자리 비우기</button>
+        </div>
       </div>
 
       <div id="sp-occupied-hint" style="display:none;margin-bottom:10px;padding:8px 12px;border-radius:7px;background:rgba(216,90,48,0.1);border:0.5px solid rgba(216,90,48,0.3);font-size:12px;color:#F0997B">
-        현재 배정: <span id="sp-occupied-name" style="font-weight:500"></span> — 다른 이름을 클릭하면 교체, 위 버튼을 누르면 비워집니다
+        현재 배정: <span id="sp-occupied-name" style="font-weight:500"></span> — 다른 이름을 클릭하면 교체, "다른 자리로 이동"을 누르면 자리만 옮기고, 위 버튼을 누르면 비워집니다
       </div>
 
       <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:8px">이름을 클릭하면 즉시 배정됩니다</div>
