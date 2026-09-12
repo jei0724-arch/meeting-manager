@@ -845,17 +845,16 @@ function buildQChips(){
   const used=new Set(Object.entries(seatData).filter(([k])=>k!==activeId).map(([,v])=>v.name));
   const el=document.getElementById('qchips');
   el.innerHTML='';
-  const attendees=MEMBERS.filter(name=>appState.attendance[name]);
+  const attendees=MEMBERS.filter(name=>appState.attendance[name]==='offline');
   if(!attendees.length){
-    el.innerHTML='<div style="font-size:12px;color:rgba(255,255,255,0.3)">참석 확인 탭에서 참석자를 먼저 선택해주세요</div>';
+    el.innerHTML='<div style="font-size:12px;color:rgba(255,255,255,0.3)">오프라인으로 참석하는 사람이 없습니다</div>';
     return;
   }
   attendees.forEach(name=>{
     const chip=document.createElement('div');
-    const hcls=appState.attendance[name]==='zoom'?'zm-h':'off-h';
-    chip.className='qchip '+hcls+(used.has(name)?' used':'');
+    chip.className='qchip off-h'+(used.has(name)?' used':'');
     chip.textContent=name;
-    chip.onclick=()=>assignSeat(name,appState.attendance[name]);
+    chip.onclick=()=>assignSeat(name,'offline');
     el.appendChild(chip);
   });
 }
