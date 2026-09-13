@@ -28,7 +28,10 @@
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
 
   /* ── Seating ── */
-  .hall-wrap { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; pointer-events:none; }
+  /* 모든 구역(별실/수유실/음향조정석/안내인석/본홀)을 하나의 가로 스크롤로 묶어
+     좁은 화면에서도 구역들이 서로 어긋나지 않고 함께 스크롤되게 한다 */
+  .seat-scroll-wrap { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; }
+  .hall-wrap { width:100%; pointer-events:none; }
   .hall { display:inline-flex; align-items:flex-start; padding:4px 2px 12px; pointer-events:auto; }
   .hall-center { display:flex; justify-content:center; min-width:100%; }
   .hall-sec { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
@@ -1775,36 +1778,40 @@ document.addEventListener('DOMContentLoaded',()=>{
         <button onclick="cancelMoveSeat()" class="btn-sm" style="font-size:11px;padding:3px 10px">취소</button>
       </div>
 
-      <!-- 별실(좌측)과 수유실+음향조정석(우측)을 같은 높이로 좌우 배치 -->
-      <div style="display:grid;margin-bottom:22px">
-        <div style="grid-area:1/1;display:flex;flex-direction:column;gap:14px;pointer-events:none">
-          <div class="hall-wrap" id="hall2-wrap">
-            <div class="hall" id="hall2"></div>
+      <!-- 좌석 배치 전체를 하나의 가로 스크롤 영역으로 묶어, 화면이 좁아도
+           구역들이 서로 어긋나지 않고 함께 스크롤되며 잘리지 않게 한다 -->
+      <div class="seat-scroll-wrap" id="seat-scroll-wrap">
+        <!-- 별실(좌측)과 수유실+음향조정석(우측)을 같은 높이로 좌우 배치 -->
+        <div style="display:grid;margin-bottom:22px">
+          <div style="grid-area:1/1;display:flex;flex-direction:column;gap:14px;pointer-events:none">
+            <div class="hall-wrap" id="hall2-wrap">
+              <div class="hall" id="hall2"></div>
+            </div>
+            <!-- 별실 아래, 간격을 두고 배치되는 안내인 자리 -->
+            <div class="hall-wrap" id="hall5-wrap">
+              <div class="hall" id="hall5"></div>
+            </div>
           </div>
-          <!-- 별실 아래, 간격을 두고 배치되는 안내인 자리 -->
-          <div class="hall-wrap" id="hall5-wrap">
-            <div class="hall" id="hall5"></div>
+          <div style="grid-area:1/1;display:flex;flex-direction:column;gap:14px;pointer-events:none">
+            <!-- 음향조정석보다 한 단계 더 뒤쪽인 수유실이 위, 음향조정석(+일반석)이 아래 -->
+            <div class="hall-wrap" id="hall4-wrap">
+              <div class="hall" id="hall4"></div>
+            </div>
+            <div class="hall-wrap" id="hall3-wrap">
+              <div class="hall" id="hall3"></div>
+            </div>
           </div>
         </div>
-        <div style="grid-area:1/1;display:flex;flex-direction:column;gap:14px;pointer-events:none">
-          <!-- 음향조정석보다 한 단계 더 뒤쪽인 수유실이 위, 음향조정석(+일반석)이 아래 -->
-          <div class="hall-wrap" id="hall4-wrap">
-            <div class="hall" id="hall4"></div>
-          </div>
-          <div class="hall-wrap" id="hall3-wrap">
-            <div class="hall" id="hall3"></div>
-          </div>
+
+        <!-- Hall — 화면 비율에 따라 자동 크기 조정 -->
+        <div class="hall-wrap" id="hall-wrap">
+          <div class="hall" id="hall"></div>
         </div>
-      </div>
 
-      <!-- Hall — 화면 비율에 따라 자동 크기 조정 -->
-      <div class="hall-wrap" id="hall-wrap">
-        <div class="hall" id="hall"></div>
-      </div>
-
-      <!-- 연단 — 아래, hall과 동일 너비 -->
-      <div style="display:flex;justify-content:center;">
-        <div id="stage-bar" class="stage-bar" style="width:100%;max-width:100%">— 연단 (강단) —</div>
+        <!-- 연단 — 아래, hall과 동일 너비 -->
+        <div style="display:flex;justify-content:center;">
+          <div id="stage-bar" class="stage-bar" style="width:100%;max-width:100%">— 연단 (강단) —</div>
+        </div>
       </div>
       <div class="dir-lbl">↑ 연단에서 청중을 바라보는 방향</div>
 
