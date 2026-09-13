@@ -28,9 +28,18 @@
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
 
   /* ── Seating ── */
-  /* 모든 구역(별실/수유실/음향조정석/안내인석/본홀)을 하나의 가로 스크롤로 묶어
-     좁은 화면에서도 구역들이 서로 어긋나지 않고 함께 스크롤되게 한다 */
-  .seat-scroll-wrap { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; }
+  /* CGV 좌석도처럼 확대/축소 + 드래그 이동이 가능한 뷰포트.
+     모든 구역(별실/수유실/음향조정석/안내인석/본홀)이 seat-zoom-content 하나로 묶여
+     함께 확대/이동되므로 서로 어긋나지 않는다. */
+  .seat-viewport { position:relative; width:100%; height:min(58vh,540px); min-height:320px; overflow:hidden; border-radius:10px; background:rgba(255,255,255,0.015); touch-action:none; cursor:grab; -webkit-user-select:none; user-select:none; }
+  .seat-viewport.seat-panning { cursor:grabbing; }
+  .seat-zoom-content { position:absolute; top:0; left:0; transform-origin:0 0; }
+  .seat-zoom-controls { position:absolute; right:10px; bottom:10px; display:flex; flex-direction:column; gap:4px; z-index:6; }
+  .seat-zoom-controls button { width:30px; height:30px; border-radius:8px; border:0.5px solid rgba(255,255,255,0.18); background:rgba(20,20,22,0.8); color:#e8e8e6; font-size:16px; line-height:1; cursor:pointer; }
+  .seat-zoom-controls button:hover { background:rgba(255,255,255,0.16); }
+  .seat-minimap { position:absolute; top:10px; left:10px; width:120px; height:84px; border-radius:8px; border:0.5px solid rgba(255,255,255,0.2); background:rgba(14,14,16,0.82); overflow:hidden; z-index:6; cursor:pointer; }
+  .seat-minimap canvas { position:absolute; inset:0; width:100%; height:100%; }
+  .seat-minimap-viewport { position:absolute; border:1.5px solid #5DCAA5; background:rgba(93,202,165,0.16); pointer-events:none; }
   .hall-wrap { width:100%; pointer-events:none; }
   .hall { display:inline-flex; align-items:flex-start; padding:4px 2px 12px; pointer-events:auto; }
   .hall-center { display:flex; justify-content:center; min-width:100%; }
@@ -463,6 +472,10 @@ let moveFromKey = null; // null이 아니면 "이 자리 사람을 다른 자리
 let viewingSnapshot = null; // null이면 실시간 좌석 배치, 값이 있으면 그 과거 스냅샷을 읽기 전용으로 보는 중
 function seatSourceData(){ return viewingSnapshot ? viewingSnapshot.data : seatData; }
 
+/* ── 좌석도 확대/이동(뷰포트) 상태 — CGV 좌석도처럼 확대·축소하고 드래그로 이동한다 ── */
+let seatZoom = 1, seatPanX = 0, seatPanY = 0;
+const SEAT_ZOOM_MIN = 0.5, SEAT_ZOOM_MAX = 3;
+
 /* ── Tab ── */
 function switchTab(name){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('tab-active'));
@@ -742,14 +755,17 @@ function buildHall(){
   populateSeatHistorySelect();
   const findList=document.getElementById('seat-find-datalist');
   if(findList) findList.innerHTML=MEMBERS.map(n=>`<option value="${escAttr(n)}">`).join('');
+  // 확대/이동 콘텐츠의 폭을 뷰포트 폭으로 고정 — 이 폭을 기준으로 좌석 크기가 계산되므로
+  // 기본(1배) 확대 상태에서는 지금까지와 동일하게 화면에 꽉 맞게 보인다
+  const viewportEl=document.getElementById('seat-viewport');
+  const zoomContentEl=document.getElementById('seat-zoom-content');
+  if(viewportEl && zoomContentEl) zoomContentEl.style.width=viewportEl.clientWidth+'px';
   buildHallInto('hall','hall-wrap',HALL_SECTIONS);
   buildHallInto('hall2','hall2-wrap',EXTRA_SECTIONS);
   buildHallInto('hall3','hall3-wrap',SOUND_SECTIONS);
   buildHallInto('hall4','hall4-wrap',NURSING_SECTIONS);
   buildHallInto('hall5','hall5-wrap',GUIDE_SECTIONS);
   updateSeatSummary();
-  const findInput=document.getElementById('seat-find-input');
-  if(findInput && findInput.value.trim()) findSeatByName(findInput.value); // 배치를 다시 그려도 검색 중이던 이름은 계속 강조
   // 연단 너비를 hall과 동일하게
   setTimeout(()=>{
     const h=document.getElementById('hall');
@@ -766,12 +782,213 @@ function buildHall(){
       const defaultHall3Top = hall4WrapEl.offsetHeight + 14;
       hall3Wrap.style.marginTop = Math.max(0, secondRowTop - defaultHall3Top)+'px';
     }
+    // 레이아웃이 확정된 뒤에 확대/이동 상태를 기본값으로 초기화하고 미니맵을 다시 그린다
+    seatZoom=1; seatPanX=0; seatPanY=0;
+    applySeatTransform();
+    redrawSeatMinimap();
+    const findInput=document.getElementById('seat-find-input');
+    if(findInput && findInput.value.trim()) findSeatByName(findInput.value); // 배치를 다시 그려도 검색 중이던 이름은 계속 강조
   }, 50);
 }
 
 // rebuild on resize
 let _resizeTimer;
 window.addEventListener('resize', ()=>{ clearTimeout(_resizeTimer); _resizeTimer=setTimeout(buildHall,150); });
+
+/* ── 좌석도 확대/이동 뷰포트 ── */
+function seatContentSize(){
+  const c=document.getElementById('seat-zoom-content');
+  return { w: c ? c.offsetWidth : 0, h: c ? c.offsetHeight : 0 };
+}
+
+function clampSeatPan(){
+  const vp=document.getElementById('seat-viewport');
+  if(!vp) return;
+  const VW=vp.clientWidth, VH=vp.clientHeight;
+  const { w:W0, h:H0 } = seatContentSize();
+  const cw=W0*seatZoom, ch=H0*seatZoom;
+  seatPanX = cw<=VW ? (VW-cw)/2 : Math.min(0, Math.max(VW-cw, seatPanX));
+  seatPanY = ch<=VH ? (VH-ch)/2 : Math.min(0, Math.max(VH-ch, seatPanY));
+}
+
+function applySeatTransform(){
+  clampSeatPan();
+  const content=document.getElementById('seat-zoom-content');
+  if(content) content.style.transform=`translate(${seatPanX}px,${seatPanY}px) scale(${seatZoom})`;
+  updateMinimapViewport();
+}
+
+// focalX/focalY: 뷰포트 기준 좌표(그 지점이 확대 전후로 화면에서 같은 자리에 남도록 고정)
+function seatZoomAt(newZoomRaw, focalX, focalY){
+  const newZoom=Math.min(SEAT_ZOOM_MAX, Math.max(SEAT_ZOOM_MIN, newZoomRaw));
+  const contentX=(focalX-seatPanX)/seatZoom;
+  const contentY=(focalY-seatPanY)/seatZoom;
+  seatZoom=newZoom;
+  seatPanX=focalX-contentX*seatZoom;
+  seatPanY=focalY-contentY*seatZoom;
+  applySeatTransform();
+}
+
+function seatZoomBy(factor){
+  const vp=document.getElementById('seat-viewport');
+  if(!vp) return;
+  seatZoomAt(seatZoom*factor, vp.clientWidth/2, vp.clientHeight/2);
+}
+
+function seatZoomReset(){
+  seatZoom=1; seatPanX=0; seatPanY=0;
+  applySeatTransform();
+}
+
+/* 미니맵 위 '지금 보고 있는 영역' 표시 사각형 갱신 — pan/zoom이 바뀔 때마다 호출 */
+function updateMinimapViewport(){
+  const mm=document.getElementById('seat-minimap');
+  const ind=document.getElementById('seat-minimap-viewport');
+  const vp=document.getElementById('seat-viewport');
+  if(!mm||!ind||!vp) return;
+  const { w:W0, h:H0 } = seatContentSize();
+  if(!W0||!H0) return;
+  const mmW=mm.clientWidth, mmH=mm.clientHeight;
+  const scaledW=W0*seatZoom, scaledH=H0*seatZoom;
+  const fracW=Math.min(1, vp.clientWidth/scaledW);
+  const fracH=Math.min(1, vp.clientHeight/scaledH);
+  const fracX=Math.min(1-fracW, Math.max(0, (-seatPanX)/scaledW));
+  const fracY=Math.min(1-fracH, Math.max(0, (-seatPanY)/scaledH));
+  ind.style.left=(fracX*mmW)+'px';
+  ind.style.top=(fracY*mmH)+'px';
+  ind.style.width=(fracW*mmW)+'px';
+  ind.style.height=(fracH*mmH)+'px';
+}
+
+/* 미니맵에 좌석 하나하나를 작은 점으로 그린다 — 좌석 배치/상태가 바뀔 때 호출 */
+function redrawSeatMinimap(){
+  const canvas=document.getElementById('seat-minimap-canvas');
+  const content=document.getElementById('seat-zoom-content');
+  if(!canvas || !content) return;
+  const ctx=canvas.getContext('2d');
+  const W0=content.offsetWidth||1, H0=content.offsetHeight||1;
+  const cw=canvas.width, ch=canvas.height;
+  ctx.clearRect(0,0,cw,ch);
+  const sx=cw/W0, sy=ch/H0;
+  content.querySelectorAll('.hseat').forEach(seatEl=>{
+    const x=seatEl.offsetLeft, y=seatEl.offsetTop;
+    const w=Math.max(1, seatEl.offsetWidth*sx);
+    const h=Math.max(1, seatEl.offsetHeight*sy);
+    let color='rgba(255,255,255,0.14)';
+    if(seatEl.classList.contains('occ-off')) color='rgba(175,169,236,0.9)';
+    else if(seatEl.classList.contains('occ-zm')) color='rgba(250,199,117,0.9)';
+    ctx.fillStyle=color;
+    ctx.fillRect(x*sx, y*sy, w, h);
+  });
+}
+
+/* 특정 좌석 엘리먼트가 뷰포트 가운데 오도록 확대/이동한다 (이름 찾기용) */
+function panToSeatElement(el){
+  const vp=document.getElementById('seat-viewport');
+  if(!vp || !el) return;
+  seatZoom=Math.max(seatZoom, 1.4);
+  const cx=el.offsetLeft+el.offsetWidth/2;
+  const cy=el.offsetTop+el.offsetHeight/2;
+  seatPanX=vp.clientWidth/2 - cx*seatZoom;
+  seatPanY=vp.clientHeight/2 - cy*seatZoom;
+  applySeatTransform();
+}
+
+/* 뷰포트/미니맵의 드래그 이동, 휠·핀치 확대 — 한 번만 연결하면 되므로 DOMContentLoaded에서 호출 */
+function initSeatViewportInteractions(){
+  const vp=document.getElementById('seat-viewport');
+  const minimap=document.getElementById('seat-minimap');
+  if(!vp || !minimap) return;
+  const DRAG_THRESHOLD=6;
+  let dragging=false, dragMoved=false, dragStartX=0, dragStartY=0, panStartX=0, panStartY=0;
+
+  function beginDrag(clientX,clientY){
+    dragging=true; dragMoved=false;
+    dragStartX=clientX; dragStartY=clientY;
+    panStartX=seatPanX; panStartY=seatPanY;
+    vp.classList.add('seat-panning');
+  }
+  function moveDrag(clientX,clientY){
+    if(!dragging) return;
+    const dx=clientX-dragStartX, dy=clientY-dragStartY;
+    if(Math.abs(dx)>DRAG_THRESHOLD || Math.abs(dy)>DRAG_THRESHOLD) dragMoved=true;
+    seatPanX=panStartX+dx; seatPanY=panStartY+dy;
+    applySeatTransform();
+  }
+  function endDrag(){
+    if(!dragging) return;
+    dragging=false;
+    vp.classList.remove('seat-panning');
+  }
+
+  vp.addEventListener('mousedown', e=>{
+    if(e.target.closest('.seat-zoom-controls, .seat-minimap')) return;
+    if(e.button!==0) return;
+    beginDrag(e.clientX, e.clientY);
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e=>{ if(dragging) moveDrag(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', endDrag);
+
+  // 드래그였으면 좌석의 클릭 이벤트를 무시(캡처 단계에서 가로챔) — 드래그 끝에 자리가 잘못 배정되는 것을 방지
+  vp.addEventListener('click', e=>{
+    if(dragMoved){ e.stopPropagation(); e.preventDefault(); dragMoved=false; }
+  }, true);
+
+  function touchDist(t0,t1){ return Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY); }
+  let pinchStartDist=0, pinchStartZoom=1, pinchFocal=null;
+
+  vp.addEventListener('touchstart', e=>{
+    if(e.target.closest('.seat-zoom-controls, .seat-minimap')) return;
+    if(e.touches.length===1){
+      beginDrag(e.touches[0].clientX, e.touches[0].clientY);
+    } else if(e.touches.length===2){
+      dragging=false;
+      const rect=vp.getBoundingClientRect();
+      pinchStartDist=touchDist(e.touches[0], e.touches[1]);
+      pinchStartZoom=seatZoom;
+      pinchFocal={ x:(e.touches[0].clientX+e.touches[1].clientX)/2-rect.left, y:(e.touches[0].clientY+e.touches[1].clientY)/2-rect.top };
+    }
+  }, {passive:true});
+  vp.addEventListener('touchmove', e=>{
+    if(e.touches.length===1 && dragging){
+      moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+      e.preventDefault();
+    } else if(e.touches.length===2 && pinchFocal){
+      const dist=touchDist(e.touches[0], e.touches[1]);
+      seatZoomAt(pinchStartZoom*(dist/pinchStartDist), pinchFocal.x, pinchFocal.y);
+      e.preventDefault();
+    }
+  }, {passive:false});
+  vp.addEventListener('touchend', e=>{
+    if(e.touches.length===0){ endDrag(); pinchFocal=null; }
+  });
+
+  // 휠로 확대/축소 (마우스 커서 위치 기준)
+  vp.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const rect=vp.getBoundingClientRect();
+    const factor=e.deltaY<0 ? 1.12 : 1/1.12;
+    seatZoomAt(seatZoom*factor, e.clientX-rect.left, e.clientY-rect.top);
+  }, {passive:false});
+
+  // 미니맵을 누르거나 드래그하면 그 위치로 바로 이동
+  function jumpFromMinimap(clientX,clientY){
+    const rect=minimap.getBoundingClientRect();
+    const fx=(clientX-rect.left)/rect.width;
+    const fy=(clientY-rect.top)/rect.height;
+    const { w:W0, h:H0 } = seatContentSize();
+    seatPanX = vp.clientWidth/2 - fx*W0*seatZoom;
+    seatPanY = vp.clientHeight/2 - fy*H0*seatZoom;
+    applySeatTransform();
+  }
+  let minimapDragging=false;
+  minimap.addEventListener('mousedown', e=>{ minimapDragging=true; jumpFromMinimap(e.clientX,e.clientY); e.preventDefault(); });
+  window.addEventListener('mousemove', e=>{ if(minimapDragging) jumpFromMinimap(e.clientX,e.clientY); });
+  window.addEventListener('mouseup', ()=>{ minimapDragging=false; });
+  minimap.addEventListener('touchstart', e=>{ const t=e.touches[0]; if(t) jumpFromMinimap(t.clientX,t.clientY); }, {passive:true});
+  minimap.addEventListener('touchmove', e=>{ const t=e.touches[0]; if(t){ jumpFromMinimap(t.clientX,t.clientY); e.preventDefault(); } }, {passive:false});
+}
 
 function renderOneSeat(el,key){
   const d=seatSourceData()[key];
@@ -1010,13 +1227,14 @@ function findSeatByName(nameRaw){
   const el=document.getElementById('hs-'+key);
   if(!el) return;
   el.classList.add('seat-found');
-  el.scrollIntoView({behavior:'smooth', block:'center', inline:'center'});
+  panToSeatElement(el);
   setTimeout(()=>el.classList.remove('seat-found'), 1900);
 }
 
 function updateSeatSummary(){
   const all=Object.values(seatSourceData());
   const el=document.getElementById('seat-summary');
+  redrawSeatMinimap();
   if(!all.length){ el.innerHTML='<span style="font-size:12px;color:rgba(255,255,255,0.3)">배정된 자리가 없습니다</span>'; return; }
   const off=all.filter(s=>s.type==='offline');
   const zm=all.filter(s=>s.type==='zoom');
@@ -1652,6 +1870,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   setMode(appState.mode||'offline');
   renderMemberList(); updateAttSummary(); renderRecentLog(); renderHistory();
   document.getElementById('sp-input').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const n=e.target.value.trim(); if(n) assignSeat(n); }});
+  initSeatViewportInteractions();
   startCloudSync();
 });
 </script>
@@ -1746,43 +1965,55 @@ document.addEventListener('DOMContentLoaded',()=>{
         <button onclick="cancelMoveSeat()" class="btn-sm" style="font-size:11px;padding:3px 10px">취소</button>
       </div>
 
-      <!-- 좌석 배치 전체를 하나의 가로 스크롤 영역으로 묶어, 화면이 좁아도
-           구역들이 서로 어긋나지 않고 함께 스크롤되며 잘리지 않게 한다 -->
-      <div class="seat-scroll-wrap" id="seat-scroll-wrap">
-        <!-- 별실(좌측)과 수유실+음향조정석(우측)을 같은 높이로 좌우 배치
-             (좁은 화면에서도 두 열이 각자 폭에 맞게 줄어들도록 실제 2열 그리드 사용) -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px">
-          <div style="min-width:0;display:flex;flex-direction:column;gap:14px;pointer-events:none">
-            <div class="hall-wrap" id="hall2-wrap">
-              <div class="hall" id="hall2"></div>
+      <!-- CGV 좌석도처럼 확대/축소 + 드래그 이동이 가능한 뷰포트.
+           모든 구역이 seat-zoom-content 하나로 묶여 함께 확대/이동되므로 서로 어긋나지 않는다. -->
+      <div class="seat-viewport" id="seat-viewport">
+        <div class="seat-zoom-content" id="seat-zoom-content">
+          <!-- 별실(좌측)과 수유실+음향조정석(우측)을 같은 높이로 좌우 배치
+               (좁은 화면에서도 두 열이 각자 폭에 맞게 줄어들도록 실제 2열 그리드 사용) -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px">
+            <div style="min-width:0;display:flex;flex-direction:column;gap:14px;pointer-events:none">
+              <div class="hall-wrap" id="hall2-wrap">
+                <div class="hall" id="hall2"></div>
+              </div>
+              <!-- 별실 아래, 간격을 두고 배치되는 안내인 자리 -->
+              <div class="hall-wrap" id="hall5-wrap">
+                <div class="hall" id="hall5"></div>
+              </div>
             </div>
-            <!-- 별실 아래, 간격을 두고 배치되는 안내인 자리 -->
-            <div class="hall-wrap" id="hall5-wrap">
-              <div class="hall" id="hall5"></div>
+            <div style="min-width:0;display:flex;flex-direction:column;gap:14px;pointer-events:none">
+              <!-- 음향조정석보다 한 단계 더 뒤쪽인 수유실이 위, 음향조정석(+일반석)이 아래 -->
+              <div class="hall-wrap" id="hall4-wrap">
+                <div class="hall" id="hall4"></div>
+              </div>
+              <div class="hall-wrap" id="hall3-wrap">
+                <div class="hall" id="hall3"></div>
+              </div>
             </div>
           </div>
-          <div style="min-width:0;display:flex;flex-direction:column;gap:14px;pointer-events:none">
-            <!-- 음향조정석보다 한 단계 더 뒤쪽인 수유실이 위, 음향조정석(+일반석)이 아래 -->
-            <div class="hall-wrap" id="hall4-wrap">
-              <div class="hall" id="hall4"></div>
-            </div>
-            <div class="hall-wrap" id="hall3-wrap">
-              <div class="hall" id="hall3"></div>
-            </div>
+
+          <!-- Hall — 화면 비율에 따라 자동 크기 조정 -->
+          <div class="hall-wrap" id="hall-wrap">
+            <div class="hall" id="hall"></div>
+          </div>
+
+          <!-- 연단 — 아래, hall과 동일 너비 -->
+          <div style="display:flex;justify-content:center;">
+            <div id="stage-bar" class="stage-bar" style="width:100%;max-width:100%">연단 (강단)</div>
           </div>
         </div>
 
-        <!-- Hall — 화면 비율에 따라 자동 크기 조정 -->
-        <div class="hall-wrap" id="hall-wrap">
-          <div class="hall" id="hall"></div>
+        <div class="seat-minimap" id="seat-minimap">
+          <canvas id="seat-minimap-canvas" width="120" height="84"></canvas>
+          <div class="seat-minimap-viewport" id="seat-minimap-viewport"></div>
         </div>
-
-        <!-- 연단 — 아래, hall과 동일 너비 -->
-        <div style="display:flex;justify-content:center;">
-          <div id="stage-bar" class="stage-bar" style="width:100%;max-width:100%">연단 (강단)</div>
+        <div class="seat-zoom-controls">
+          <button type="button" onclick="seatZoomBy(1.25)" aria-label="확대">+</button>
+          <button type="button" onclick="seatZoomBy(0.8)" aria-label="축소">−</button>
+          <button type="button" onclick="seatZoomReset()" aria-label="원래 크기">⤢</button>
         </div>
       </div>
-      <div class="dir-lbl">↑ 연단에서 청중을 바라보는 방향</div>
+      <div class="dir-lbl">↑ 연단에서 청중을 바라보는 방향 · 손가락/드래그로 이동, 휠·핀치로 확대</div>
 
       <div class="seat-legend">
         <div class="seat-legend-item"><span class="seat-legend-swatch"></span>빈 자리</div>
