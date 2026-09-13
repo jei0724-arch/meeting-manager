@@ -760,26 +760,21 @@ function buildHall(){
     // 같은 x축으로 정렬한다. 본홀은 항상 화면 폭에 딱 맞게 렌더되므로(가로 스크롤이
     // 생기지 않으므로) 이 계산 결과도 항상 화면 안에 들어온다.
     const hallWrapEl = document.getElementById('hall-wrap');
+    const hallEl = document.getElementById('hall');
     const hall2Wrap = document.getElementById('hall2-wrap');
     const hall3Wrap = document.getElementById('hall3-wrap');
     const hall4Wrap = document.getElementById('hall4-wrap');
     const hall5Wrap = document.getElementById('hall5-wrap');
-    if(hallWrapEl){
-      const { sz, gap, aisleTotal } = calcSeatSize(HALL_SECTIONS, 'hall-wrap');
-      const totalCols = HALL_SECTIONS.reduce((s,sec)=>s+sec.cols,0);
-      const numAisles = HALL_SECTIONS.length-1;
-      const totalHallWidth = totalCols*sz + (totalCols-1)*gap + numAisles*aisleTotal;
-      const centerOffset = Math.max(0, (hallWrapEl.clientWidth - totalHallWidth) / 2);
-      const hallRightEdge = centerOffset + totalHallWidth;
-      // 그룹 자신의 폭을 구해 오른쪽 끝을 본홀 우측 좌석의 끝(hallRightEdge)에 맞춘다
-      function rightAlign(wrap, sections, wrapId){
-        if(!wrap) return;
-        const s=calcSeatSize(sections, wrapId);
-        const cols=sections.reduce((sum,sec)=>sum+sec.cols,0);
-        const aisles=sections.length-1;
-        const w=cols*s.sz + (cols-1)*s.gap + aisles*s.aisleTotal;
+    if(hallWrapEl && hallEl){
+      // 실제 렌더된 본홀(.hall)의 폭을 그대로 재서 쓴다 — 재계산으로 인한 오차를 없애기 위해
+      const centerOffset = Math.max(0, (hallWrapEl.clientWidth - hallEl.offsetWidth) / 2);
+      const hallRightEdge = centerOffset + hallEl.offsetWidth;
+      // 실제 렌더된 그룹(.hall3/.hall4 등)의 폭을 그대로 재서 오른쪽 끝을 hallRightEdge에 맞춘다
+      function rightAlign(wrap, hallId){
+        const el=document.getElementById(hallId);
+        if(!wrap || !el) return;
         wrap.style.justifyContent='flex-start';
-        wrap.style.paddingLeft=Math.max(0, hallRightEdge-w)+'px';
+        wrap.style.paddingLeft=Math.max(0, hallRightEdge-el.offsetWidth)+'px';
       }
       if(hall2Wrap){
         hall2Wrap.style.justifyContent='flex-start';
@@ -790,8 +785,8 @@ function buildHall(){
         hall5Wrap.style.paddingLeft=centerOffset+'px';
       }
       // 일반석+음향조정석(hall3), 수유실(hall4) 모두 오른쪽 끝을 본홀 우측 좌석의 끝과 맞춘다
-      rightAlign(hall3Wrap, SOUND_SECTIONS, 'hall3-wrap');
-      rightAlign(hall4Wrap, NURSING_SECTIONS, 'hall4-wrap');
+      rightAlign(hall3Wrap, 'hall3');
+      rightAlign(hall4Wrap, 'hall4');
     }
     // 일반석/음향조정석(hall3)을 안내인(hall5)과 같은 행 높이로 내린다
     // (별실이 수유실보다 세로로 길어 기본 배치로는 두 줄의 높이가 어긋나므로,
