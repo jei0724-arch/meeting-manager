@@ -756,12 +756,51 @@ function buildHall(){
     const h=document.getElementById('hall');
     const sb=document.getElementById('stage-bar');
     if(h&&sb){ sb.style.width=h.offsetWidth+'px'; sb.style.maxWidth='none'; }
+    // 별실/안내인을 본홀의 좌측 좌석과, 수유실/음향조정석/일반석을 본홀의 우측 좌석과
+    // 같은 x축으로 정렬한다. 본홀은 항상 화면 폭에 딱 맞게 렌더되므로(가로 스크롤이
+    // 생기지 않으므로) 이 계산 결과도 항상 화면 안에 들어온다.
+    const hallWrapEl = document.getElementById('hall-wrap');
+    const hall2Wrap = document.getElementById('hall2-wrap');
+    const hall3Wrap = document.getElementById('hall3-wrap');
+    const hall4Wrap = document.getElementById('hall4-wrap');
+    const hall5Wrap = document.getElementById('hall5-wrap');
+    if(hallWrapEl){
+      const { sz, gap, aisleTotal } = calcSeatSize(HALL_SECTIONS, 'hall-wrap');
+      const lastSec = HALL_SECTIONS[HALL_SECTIONS.length-1];
+      const totalCols = HALL_SECTIONS.reduce((s,sec)=>s+sec.cols,0);
+      const numAisles = HALL_SECTIONS.length-1;
+      const totalHallWidth = totalCols*sz + (totalCols-1)*gap + numAisles*aisleTotal;
+      const centerOffset = Math.max(0, (hallWrapEl.clientWidth - totalHallWidth) / 2);
+      const lastSecWidth = lastSec.cols*sz + (lastSec.cols-1)*gap;
+      const rightSecOffset = centerOffset + (totalHallWidth - lastSecWidth);
+      const hallRightEdge = centerOffset + totalHallWidth;
+      if(hall2Wrap){
+        hall2Wrap.style.justifyContent='flex-start';
+        hall2Wrap.style.paddingLeft=centerOffset+'px';
+      }
+      if(hall3Wrap){
+        // 음향조정석(SOUND_SECTIONS의 마지막 구역) 오른쪽 끝을 본홀 우측 좌석의 끝과 맞춘다
+        const soundSz = calcSeatSize(SOUND_SECTIONS, 'hall3-wrap');
+        const soundTotalCols = SOUND_SECTIONS.reduce((s,sec)=>s+sec.cols,0);
+        const soundNumAisles = SOUND_SECTIONS.length-1;
+        const soundWidth = soundTotalCols*soundSz.sz + (soundTotalCols-1)*soundSz.gap + soundNumAisles*soundSz.aisleTotal;
+        hall3Wrap.style.justifyContent='flex-start';
+        hall3Wrap.style.paddingLeft=Math.max(0, hallRightEdge - soundWidth)+'px';
+      }
+      if(hall4Wrap){
+        hall4Wrap.style.justifyContent='flex-start';
+        hall4Wrap.style.paddingLeft=rightSecOffset+'px';
+      }
+      if(hall5Wrap){
+        hall5Wrap.style.justifyContent='flex-start';
+        hall5Wrap.style.paddingLeft=centerOffset+'px';
+      }
+    }
     // 일반석/음향조정석(hall3)을 안내인(hall5)과 같은 행 높이로 내린다
     // (별실이 수유실보다 세로로 길어 기본 배치로는 두 줄의 높이가 어긋나므로,
     //  실제 렌더된 높이 차만큼 hall3에 위쪽 여백을 더해 맞춘다)
     const hall2WrapEl = document.getElementById('hall2-wrap');
     const hall4WrapEl = document.getElementById('hall4-wrap');
-    const hall3Wrap = document.getElementById('hall3-wrap');
     if(hall2WrapEl && hall4WrapEl && hall3Wrap){
       const secondRowTop = hall2WrapEl.offsetHeight + 14;
       const defaultHall3Top = hall4WrapEl.offsetHeight + 14;
@@ -1749,10 +1788,11 @@ document.addEventListener('DOMContentLoaded',()=>{
 
       <!-- 좌석 전체 폭이 항상 화면(카드) 폭에 정확히 맞도록 하는 반응형 레이아웃 (확대/축소 없음) -->
       <div class="seat-wrap" id="seat-wrap">
-        <!-- 별실(좌측)과 수유실+음향조정석(우측)을 같은 높이로 좌우 배치
-             (좁은 화면에서도 두 열이 각자 폭에 맞게 줄어들도록 실제 2열 그리드 사용) -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px">
-          <div style="min-width:0;display:flex;flex-direction:column;gap:14px;pointer-events:none">
+        <!-- 별실+안내인(좌측)과 수유실+음향조정석+일반석(우측)을 본홀의 좌측/우측 좌석과
+             같은 x축으로 정렬한다. 두 그룹을 같은 grid-area에 겹쳐 두고(JS가 각자 폭을
+             구한 뒤 padding-left로 좌/우 끝에 붙임) 같은 높이로 배치한다 -->
+        <div style="display:grid;margin-bottom:22px">
+          <div style="grid-area:1/1;display:flex;flex-direction:column;gap:14px;pointer-events:none">
             <div class="hall-wrap" id="hall2-wrap">
               <div class="hall" id="hall2"></div>
             </div>
@@ -1761,7 +1801,7 @@ document.addEventListener('DOMContentLoaded',()=>{
               <div class="hall" id="hall5"></div>
             </div>
           </div>
-          <div style="min-width:0;display:flex;flex-direction:column;gap:14px;pointer-events:none">
+          <div style="grid-area:1/1;display:flex;flex-direction:column;gap:14px;pointer-events:none">
             <!-- 음향조정석보다 한 단계 더 뒤쪽인 수유실이 위, 음향조정석(+일반석)이 아래 -->
             <div class="hall-wrap" id="hall4-wrap">
               <div class="hall" id="hall4"></div>
