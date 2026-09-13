@@ -38,10 +38,13 @@
   .sec-lbl { color:rgba(255,255,255,0.3); letter-spacing:.05em; text-align:center; white-space:nowrap; }
   .hall-row { display:flex; }
   .aisle-gap { flex-shrink:0; }
-  .hseat { border:0.5px solid rgba(255,255,255,0.1); border-radius:5px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:all .12s; background:rgba(255,255,255,0.03); flex-shrink:0; -webkit-tap-highlight-color:transparent; }
+  /* CGV 좌석도 느낌: 등받이 탭(::before)이 달린 '좌석 아이콘' 모양 —
+     background/border를 inherit해서 상태색(빈자리/배정됨/선택됨 등)이 그대로 등받이에도 반영된다 */
+  .hseat { position:relative; border:0.5px solid rgba(255,255,255,0.1); border-radius:3px 3px 7px 7px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:all .12s; background:rgba(255,255,255,0.03); flex-shrink:0; -webkit-tap-highlight-color:transparent; }
+  .hseat::before { content:''; position:absolute; top:-3px; left:50%; transform:translateX(-50%); width:46%; min-width:6px; height:5px; border-radius:3px 3px 0 0; background:inherit; border:inherit; border-bottom:none; }
   .hseat:hover { border-color:rgba(255,255,255,0.35); background:rgba(255,255,255,0.08); }
-  .hseat.occ-off { background:rgba(127,119,221,0.15); border-color:rgba(127,119,221,0.5); }
-  .hseat.occ-zm  { background:rgba(186,117,23,0.15);  border-color:rgba(186,117,23,0.5); }
+  .hseat.occ-off { background:rgba(127,119,221,0.32); border-color:rgba(127,119,221,0.75); }
+  .hseat.occ-zm  { background:rgba(186,117,23,0.32);  border-color:rgba(186,117,23,0.75); }
   .hseat.active-sel { border:2px solid #378ADD !important; background:rgba(55,138,221,0.12) !important; }
   @keyframes moveSourcePulse { 0%,100%{ box-shadow:0 0 0 0 rgba(93,202,165,0.55); } 50%{ box-shadow:0 0 0 5px rgba(93,202,165,0.05); } }
   .hseat.move-source { border:2px dashed #5DCAA5 !important; animation:moveSourcePulse 1.1s ease-in-out infinite; z-index:1; }
@@ -49,16 +52,17 @@
   .hseat.seat-found { border-color:#5DCAA5 !important; animation:seatFoundPulse 0.9s ease-out 2; z-index:1; }
   body.seat-history-mode .hseat { cursor:default; }
   body.seat-history-mode .hseat:hover { border-color:rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); }
-  body.seat-history-mode .hseat.occ-off:hover { background:rgba(127,119,221,0.15); }
-  body.seat-history-mode .hseat.occ-zm:hover  { background:rgba(186,117,23,0.15); }
+  body.seat-history-mode .hseat.occ-off:hover { background:rgba(127,119,221,0.32); }
+  body.seat-history-mode .hseat.occ-zm:hover  { background:rgba(186,117,23,0.32); }
   .hseat .sn { font-weight:500; line-height:1.2; text-align:center; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   .hseat.occ-off .sn { color:#AFA9EC; }
   .hseat.occ-zm  .sn { color:#FAC775; }
   .hseat .st { margin-top:1px; }
-  .hseat.occ-off .st { color:rgba(127,119,221,0.7); }
-  .hseat.occ-zm  .st { color:rgba(186,117,23,0.7); }
+  .hseat.occ-off .st { color:rgba(175,169,236,0.85); }
+  .hseat.occ-zm  .st { color:rgba(250,199,117,0.85); }
   .hseat .se { color:rgba(255,255,255,0.15); }
-  .stage-bar { text-align:center; padding:9px; border:0.5px solid rgba(255,255,255,0.15); border-radius:8px; font-size:12px; color:rgba(255,255,255,0.4); background:rgba(255,255,255,0.04); letter-spacing:.06em; max-width:220px; margin:10px auto 4px; }
+  /* 곡선 스크린 바 — 상단만 둥글게(border-radius의 가로/세로 반지름을 다르게 줘 얕은 돔 형태를 만듦) + 은은한 빛 번짐 */
+  .stage-bar { display:flex; align-items:center; justify-content:center; height:24px; border:none; border-radius:50% 50% 6px 6px / 100% 100% 8px 8px; background:linear-gradient(180deg, rgba(130,180,255,0.32), rgba(130,180,255,0.05)); box-shadow:0 10px 26px -8px rgba(120,175,255,0.6), inset 0 1px 0 rgba(255,255,255,0.12); font-size:11px; color:rgba(225,238,255,0.6); letter-spacing:.16em; max-width:220px; margin:16px auto 6px; }
   .dir-lbl { text-align:center; font-size:11px; color:rgba(255,255,255,0.2); letter-spacing:.04em; }
   .seat-panel { border:0.5px solid rgba(255,255,255,0.12); border-radius:12px; padding:1rem 1.25rem; background:rgba(255,255,255,0.04); margin-top:1rem; }
   .type-row { display:flex; gap:6px; margin-bottom:10px; }
@@ -86,6 +90,15 @@
   .ss { font-size:11px; padding:3px 10px; border-radius:6px; }
   .ss.off { background:rgba(127,119,221,0.15); color:#AFA9EC; }
   .ss.zm  { background:rgba(186,117,23,0.15);  color:#FAC775; }
+
+  /* CGV식 하단 범례 — 실제 좌석과 같은 등받이 탭 모양의 미니 스와치로 상태를 보여준다 */
+  .seat-legend { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; margin:14px 0 2px; font-size:11px; color:rgba(255,255,255,0.5); }
+  .seat-legend-item { display:flex; align-items:center; gap:7px; }
+  .seat-legend-swatch { position:relative; display:inline-block; width:20px; height:16px; border-radius:2px 2px 5px 5px; border:0.5px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.03); }
+  .seat-legend-swatch::before { content:''; position:absolute; top:-2px; left:50%; transform:translateX(-50%); width:46%; height:4px; border-radius:2px 2px 0 0; background:inherit; border:inherit; border-bottom:none; }
+  .seat-legend-swatch.leg-occ { background:rgba(127,119,221,0.32); border-color:rgba(127,119,221,0.75); }
+  .seat-legend-swatch.leg-sel { background:rgba(55,138,221,0.2); border:1.5px solid #378ADD; }
+  .seat-legend-swatch.leg-move { background:rgba(93,202,165,0.12); border:1.5px dashed #5DCAA5; }
 
   /* ── Stats tab ── */
   .stat-tile { padding:14px 16px; }
@@ -1709,11 +1722,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   <!-- ② 좌석 배치 -->
   <div id="pp-seating" class="panel-page" style="display:none">
     <div class="glass rounded-xl p-5 mb-4">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,0.45)"><div style="width:9px;height:9px;border-radius:50%;background:#7F77DD"></div>오프라인</div>
-          <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,0.45)"><div style="width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,0.12)"></div>빈 자리</div>
-        </div>
+      <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:14px;flex-wrap:wrap;gap:8px">
         <div id="seat-live-actions" style="display:flex;gap:6px">
           <button onclick="saveSeatSnapshot()" class="btn-sm">배치 저장</button>
           <button onclick="clearAllSeats()" class="btn-sm danger">전체 초기화</button>
@@ -1770,10 +1779,17 @@ document.addEventListener('DOMContentLoaded',()=>{
 
         <!-- 연단 — 아래, hall과 동일 너비 -->
         <div style="display:flex;justify-content:center;">
-          <div id="stage-bar" class="stage-bar" style="width:100%;max-width:100%">— 연단 (강단) —</div>
+          <div id="stage-bar" class="stage-bar" style="width:100%;max-width:100%">연단 (강단)</div>
         </div>
       </div>
       <div class="dir-lbl">↑ 연단에서 청중을 바라보는 방향</div>
+
+      <div class="seat-legend">
+        <div class="seat-legend-item"><span class="seat-legend-swatch"></span>빈 자리</div>
+        <div class="seat-legend-item"><span class="seat-legend-swatch leg-occ"></span>배정됨</div>
+        <div class="seat-legend-item"><span class="seat-legend-swatch leg-sel"></span>선택된 자리</div>
+        <div class="seat-legend-item"><span class="seat-legend-swatch leg-move"></span>이동 중</div>
+      </div>
 
       <div class="seat-summary" id="seat-summary"></div>
     </div>
