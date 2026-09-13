@@ -1620,7 +1620,7 @@ function updateGroupSummary(){
   let totalAll=0, checkedAll=0;
   for(let ci=0; ci<ncols; ci++){
     let total=0, checked=0;
-    const names=[GROUP_DATA.supervisor[ci+1], GROUP_DATA.assistant[ci+1], ...GROUP_DATA.rows.map(row=>row[ci+1])];
+    const names=GROUP_DATA.rows.map(row=>row[ci+1]); // 감독자·보조자는 집단 인원수에서 제외
     names.forEach(name=>{ if(name){ total++; if(appState.attendance[name]) checked++; } });
     const el=document.getElementById('grp-count-'+ci);
     if(el) el.textContent=checked+'/'+total+'명';
