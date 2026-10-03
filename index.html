@@ -1226,6 +1226,10 @@ function renderStats(){
 }
 
 /* ── 출석률 분석 (실무 지표: 출석률, 최근 추세, 정착/이탈 위험, 회원 등급) ── */
+function fmtDay(ts){
+  const d=new Date(ts);
+  return d.getFullYear()+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+String(d.getDate()).padStart(2,'0')+'('+'일월화수목금토'[d.getDay()]+')';
+}
 let memberStatusFilter='all';
 const STATUS_META={
   core:   {label:'핵심',    color:'#5DCAA5'},
@@ -1268,7 +1272,7 @@ function renderAttendanceAnalytics(chrono){
   const reg=MEMBERS.length;
   const memberSet=new Set(MEMBERS);
   const sess=chrono.map(l=>({
-    date:l.date.split(' ')[0], ts:l.timestamp,
+    date:fmtDay(l.timestamp), ts:l.timestamp,
     members:l.attendees.filter(([n])=>memberSet.has(n)).length,
     off:l.attendees.filter(([,t])=>t==='offline').length,
     zm:l.attendees.filter(([,t])=>t==='zoom').length
@@ -1319,7 +1323,7 @@ function renderModeAnalytics(chrono, reg){
   const rows=chrono.map(l=>{
     const off=l.attendees.filter(([,t])=>t==='offline').length;
     const zm=l.attendees.filter(([,t])=>t==='zoom').length;
-    return { date:l.date.split(' ')[0], off, zm, tot:off+zm };
+    return { date:fmtDay(l.timestamp), off, zm, tot:off+zm };
   });
   const sum=k=>rows.reduce((s,r)=>s+r[k],0);
   const off=sum('off'), zm=sum('zm'), tot=off+zm;
@@ -1494,7 +1498,7 @@ let statsPeriod='day';
 function aggregateByPeriod(chrono, period){
   if(period==='day'){
     return chrono.map(log=>({
-      key:log.timestamp, label:log.date.split(' ')[0],
+      key:log.timestamp, label:fmtDay(log.timestamp),
       off:log.attendees.filter(([,t])=>t==='offline').length,
       zm:log.attendees.filter(([,t])=>t==='zoom').length,
       sessions:1
