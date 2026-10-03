@@ -804,7 +804,19 @@ function buildHall(){
 
 // rebuild on resize
 let _resizeTimer;
-window.addEventListener('resize', ()=>{ clearTimeout(_resizeTimer); _resizeTimer=setTimeout(buildHall,150); });
+// 모바일에서는 스크롤 중 주소창이 접히거나 키보드가 열릴 때도 resize가 발생한다(높이만 변함).
+// 그때마다 좌석을 다시 그리면 페이지 높이가 순간 줄어 화면이 위로 튀므로, 가로 폭이 바뀐 경우에만 다시 그린다.
+let _lastResizeW=window.innerWidth;
+window.addEventListener('resize', ()=>{
+  if(window.innerWidth===_lastResizeW) return;
+  clearTimeout(_resizeTimer);
+  _resizeTimer=setTimeout(()=>{
+    _lastResizeW=window.innerWidth;
+    const y=window.scrollY;
+    buildHall();
+    window.scrollTo(0,y);
+  },150);
+});
 
 function renderOneSeat(el,key){
   const d=seatSourceData()[key];
