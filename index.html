@@ -1311,6 +1311,75 @@ function renderAttendanceAnalytics(chrono){
   renderRateChart(sess.slice(-20), reg, overall);
   renderDowGrid(sess, reg);
   renderMemberStatus(ms, chrono.length);
+  renderModeAnalytics(chrono, reg);
+}
+/* 오프라인 / 줌 분리 통계 */
+function renderModeAnalytics(chrono, reg){
+  const n=chrono.length;
+  const rows=chrono.map(l=>{
+    const off=l.attendees.filter(([,t])=>t==='offline').length;
+    const zm=l.attendees.filter(([,t])=>t==='zoom').length;
+    return { date:l.date.split(' ')[0], off, zm, tot:off+zm };
+  });
+  const sum=k=>rows.reduce((s,r)=>s+r[k],0);
+  const off=sum('off'), zm=sum('zm'), tot=off+zm;
+  const pct=(a,b)=>b?Math.round(a/b*1000)/10:0;
+  const lastN=rows.slice(-4), lo=lastN.reduce((s,r)=>s+r.off,0), lz=lastN.reduce((s,r)=>s+r.zm,0);
+  const kpis=[
+    ['오프라인 참석 비중', tot?pct(off,tot)+'%':'-', `총 ${off}명`],
+    ['줌 참석 비중', tot?pct(zm,tot)+'%':'-', `총 ${zm}명`],
+    ['오프라인 평균 인원', (off/n).toFixed(1)+'명', reg?`회당 출석률 ${pct(off/n,reg)}%`:''],
+    ['줌 평균 인원', (zm/n).toFixed(1)+'명', reg?`회당 출석률 ${pct(zm/n,reg)}%`:''],
+    ['최근 4회 줌 비중', (lo+lz)?pct(lz,lo+lz)+'%':'-', `전체 ${tot?pct(zm,tot):0}% 대비`]
+  ];
+  const g=document.getElementById('mode-kpi-grid'); g.innerHTML='';
+  kpis.forEach(([a,b,c])=>{
+    const t=document.createElement('div'); t.className='glass rounded-xl stat-tile';
+    t.innerHTML='<div class="stat-label"></div><div class="stat-value" style="font-size:18px"></div><div class="stat-sub"></div>';
+    t.children[0].textContent=a; t.children[1].textContent=b; t.children[2].textContent=c; g.appendChild(t);
+  });
+
+  const bar=(o,z)=>{
+    const wrap=document.createElement('div'); wrap.style.cssText='display:flex;height:14px;border-radius:3px;overflow:hidden;background:rgba(255,255,255,0.05);flex:2.4';
+    if(o+z){
+      const a=document.createElement('div'); a.style.cssText=`width:${o/(o+z)*100}%;background:#7F77DD`;
+      const b=document.createElement('div'); b.style.cssText=`width:${z/(o+z)*100}%;background:#BA7517`;
+      wrap.append(a,b);
+    }
+    return wrap;
+  };
+  const cell=(txt,flex,color)=>{ const s=document.createElement('span'); s.textContent=txt; if(flex) s.style.flex=flex; if(color) s.style.color=color; return s; };
+  const addHead=(el,labels)=>{
+    const h=document.createElement('div'); h.className='stats-table-row';
+    h.style.cssText='position:sticky;top:0;background:#141414;color:rgba(255,255,255,0.35);font-size:11px';
+    labels.forEach(([t,f])=>h.appendChild(cell(t,f))); el.appendChild(h);
+  };
+
+  const daily=document.getElementById('mode-daily-list'); daily.innerHTML='';
+  addHead(daily,[['일자',1.2],['비율',2.4],['오프라인',1],['줌',1],['합계',0.8]]);
+  rows.slice().reverse().forEach(r=>{
+    const row=document.createElement('div'); row.className='stats-table-row'; row.style.alignItems='center';
+    row.append(cell(r.date,1.2), bar(r.off,r.zm),
+      cell(`${r.off}명 (${pct(r.off,r.tot)}%)`,1,'#a8a2ee'), cell(`${r.zm}명 (${pct(r.zm,r.tot)}%)`,1,'#d99a3c'), cell(r.tot+'명',0.8));
+    daily.appendChild(row);
+  });
+
+  const per={};
+  chrono.forEach(l=>l.attendees.forEach(([name,t])=>{
+    const m=per[name]||(per[name]={off:0,zm:0}); if(t==='zoom') m.zm++; else if(t==='offline') m.off++;
+  }));
+  const mlist=document.getElementById('mode-member-list'); mlist.innerHTML='';
+  addHead(mlist,[['회원',1],['비율',2.4],['오프라인',0.9],['줌',0.9],['선호',0.8]]);
+  Object.entries(per).sort((a,b)=>{
+    const ra=a[1].zm/(a[1].off+a[1].zm||1), rb=b[1].zm/(b[1].off+b[1].zm||1);
+    return ra-rb || (b[1].off+b[1].zm)-(a[1].off+a[1].zm);
+  }).forEach(([name,m])=>{
+    const t=m.off+m.zm, p=t?m.zm/t:0;
+    const row=document.createElement('div'); row.className='stats-table-row'; row.style.alignItems='center';
+    row.append(cell(name,1,'rgba(255,255,255,0.7)'), bar(m.off,m.zm), cell(m.off+'회',0.9), cell(m.zm+'회',0.9),
+      cell(p===0?'오프라인':p===1?'줌':p>=0.5?'줌 위주':'오프 위주',0.8));
+    mlist.appendChild(row);
+  });
 }
 function renderRateChart(sess, reg, overall){
   const el=document.getElementById('rate-chart');
@@ -2080,6 +2149,19 @@ document.addEventListener('DOMContentLoaded',()=>{
         <div id="rate-chart" class="trend-chart" style="position:relative;height:170px"></div>
         <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3);margin:16px 0 8px">요일별 평균 출석률</div>
         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px" id="dow-grid"></div>
+      </div>
+
+      <div class="glass rounded-xl p-5 mb-4">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3);margin-bottom:12px">참여 방식 분석 (오프라인 · 줌)</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.75rem;margin-bottom:14px" id="mode-kpi-grid"></div>
+        <div class="legend-row" style="margin-bottom:8px">
+          <div class="legend-item"><span class="legend-swatch" style="background:#7F77DD"></span>오프라인</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#BA7517"></span>줌</div>
+        </div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:6px">일자별 참석 방식 비율 (최신순)</div>
+        <div style="overflow-x:auto"><div id="mode-daily-list" style="min-width:380px;max-height:360px;overflow-y:auto"></div></div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.3);margin:16px 0 6px">회원별 참석 방식 (주로 쓰는 방식 순)</div>
+        <div style="overflow-x:auto"><div id="mode-member-list" style="min-width:380px;max-height:360px;overflow-y:auto"></div></div>
       </div>
 
       <div class="glass rounded-xl p-5 mb-4">
