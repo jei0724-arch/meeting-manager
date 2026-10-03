@@ -661,7 +661,7 @@ function renderRecentLog(){
     const off=log.attendees.filter(([,t])=>t==='offline').map(([n])=>n);
     const zm=log.attendees.filter(([,t])=>t==='zoom').map(([n])=>n);
     return `<div class="glass rounded-lg p-3 mb-2">
-      <div style="font-size:11px;font-weight:500;margin-bottom:4px;color:rgba(255,255,255,0.6)">${log.date}</div>
+      <div style="font-size:11px;font-weight:500;margin-bottom:4px;color:rgba(255,255,255,0.6)">${log.date} <span style="font-weight:400;color:rgba(255,255,255,0.35)">· 오프 ${off.length} · 줌 ${zm.length} · 총 ${log.attendees.length}명</span></div>
       <div style="font-size:11px;color:rgba(255,255,255,0.4);line-height:1.7">
         ${off.length?`<span style="color:#AFA9EC">●</span> ${off.join(', ')}<br>`:''}
         ${zm.length?`<span style="color:#FAC775">●</span> ${zm.join(', ')}`:''}
@@ -1091,14 +1091,16 @@ function renderAttHistory(){
       <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer" onclick="document.getElementById('ah-${i}').classList.toggle('open')">
         <span style="font-size:13px">${log.date}</span>
         <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">${log.attendees.length}명</span>
+          <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(127,119,221,0.15);color:#AFA9EC">오프 ${off.length}</span>
+          <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(186,117,23,0.15);color:#FAC775">줌 ${zm.length}</span>
+          <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45)">총 ${log.attendees.length}명</span>
           <button onclick="event.stopPropagation();startEditAttLog(${i})" class="btn-sm" style="font-size:11px;padding:2px 8px">수정</button>
           <button onclick="event.stopPropagation();deleteAttLog(${i})" style="font-size:11px;padding:2px 8px;border-radius:5px;border:0.5px solid rgba(216,90,48,0.4);background:rgba(216,90,48,0.1);color:#F0997B;cursor:pointer">삭제</button>
         </div>
       </div>
       <div class="history-body" id="ah-${i}" style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07);font-size:12px;color:rgba(255,255,255,0.5);line-height:1.8">
-        ${off.length?`<div><span style="color:#AFA9EC">● 오프라인</span> — ${off.join(', ')}</div>`:''}
-        ${zm.length?`<div><span style="color:#FAC775">● 줌</span> — ${zm.join(', ')}</div>`:''}
+        ${off.length?`<div><span style="color:#AFA9EC">● 오프라인 ${off.length}명</span> — ${off.join(', ')}</div>`:''}
+        ${zm.length?`<div><span style="color:#FAC775">● 줌 ${zm.length}명</span> — ${zm.join(', ')}</div>`:''}
       </div></div>`;
   }).join('');
   const searchInput=document.getElementById('att-hist-search-input');
