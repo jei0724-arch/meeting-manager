@@ -85,6 +85,7 @@
   .period-btn:first-child { border-radius:7px 0 0 7px; }
   .period-btn:last-child { border-radius:0 7px 7px 0; }
   .period-btn + .period-btn { border-left:none; }
+  .btn-sm.active { background:rgba(255,255,255,0.14); color:#e8e8e6; }
   .period-btn.active { background:rgba(255,255,255,0.14); color:#e8e8e6; }
   .seat-summary { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; padding-top:10px; border-top:0.5px solid rgba(255,255,255,0.07); }
   .ss { font-size:11px; padding:3px 10px; border-radius:6px; }
@@ -1218,9 +1219,183 @@ function renderStats(){
   document.getElementById('stat-top').textContent=ranking.length?ranking[0][0]:'-';
   document.getElementById('stat-top-sub').textContent=ranking.length?`${ranking[0][1]}회 참석`:'';
 
+  renderAttendanceAnalytics(chrono);
   renderWeekdayWeekend(chrono);
   renderTrendChart(aggregateByPeriod(chrono, statsPeriod));
   renderRankList(ranking);
+}
+
+/* ── 출석률 분석 (실무 지표: 출석률, 최근 추세, 정착/이탈 위험, 회원 등급) ── */
+let memberStatusFilter='all';
+const STATUS_META={
+  core:   {label:'핵심',    color:'#5DCAA5'},
+  regular:{label:'정기',    color:'#7F77DD'},
+  casual: {label:'간헐',    color:'#BA7517'},
+  low:    {label:'저조',    color:'#D4537E'},
+  newbie: {label:'신규',    color:'#378ADD'},
+  risk:   {label:'이탈위험',color:'#E24B4A'},
+  none:   {label:'미참석',  color:'#888780'}
+};
+const STATUS_ORDER=['core','regular','casual','low','newbie','risk','none'];
+function pctStr(v){ return (Math.round(v*10)/10)+'%'; }
+function avgRate(sessions,regCount){
+  if(!sessions.length||!regCount) return 0;
+  return sessions.reduce((s,l)=>s+l.members/regCount,0)/sessions.length*100;
+}
+function computeMemberStats(chrono){
+  const total=chrono.length;
+  const sets=chrono.map(l=>new Set(l.attendees.map(([n])=>n)));
+  return MEMBERS.map(name=>{
+    const idx=[]; sets.forEach((s,i)=>{ if(s.has(name)) idx.push(i); });
+    const attended=idx.length;
+    const recentN=Math.min(4,total);
+    const recentAtt=idx.filter(i=>i>=total-recentN).length;
+    let streak=0; for(let i=total-1;i>=0&&sets[i].has(name);i--) streak++;
+    let absent=0; for(let i=total-1;i>=0&&!sets[i].has(name);i--) absent++;
+    let status;
+    if(!attended) status='none';
+    else if(total>=4 && idx[0]>=total-3) status='newbie';
+    else if(total>=4 && absent>=3) status='risk';
+    else{
+      const r=attended/total*100;
+      status=r>=80?'core':r>=50?'regular':r>=20?'casual':'low';
+    }
+    return { name, attended, rate:total?attended/total*100:0,
+      recentRate:recentN?recentAtt/recentN*100:0, streak, absent, status };
+  });
+}
+function renderAttendanceAnalytics(chrono){
+  const reg=MEMBERS.length;
+  const memberSet=new Set(MEMBERS);
+  const sess=chrono.map(l=>({
+    date:l.date.split(' ')[0], ts:l.timestamp,
+    members:l.attendees.filter(([n])=>memberSet.has(n)).length,
+    off:l.attendees.filter(([,t])=>t==='offline').length,
+    zm:l.attendees.filter(([,t])=>t==='zoom').length
+  }));
+  const overall=avgRate(sess,reg);
+  const last4=sess.slice(-4), prev4=sess.slice(-8,-4);
+  const recent=avgRate(last4,reg);
+  const delta=prev4.length?recent-avgRate(prev4,reg):null;
+  const ms=computeMemberStats(chrono);
+  const cnt=k=>ms.filter(m=>m.status===k).length;
+  const active=ms.filter(m=>m.recentRate>0).length;
+  const rates=sess.map(s=>reg?s.members/reg*100:0);
+  const peak=sess.length?sess[rates.indexOf(Math.max(...rates))]:null;
+  const low=sess.length?sess[rates.indexOf(Math.min(...rates))]:null;
+  const mean=rates.reduce((a,b)=>a+b,0)/(rates.length||1);
+  const sd=Math.sqrt(rates.reduce((a,b)=>a+(b-mean)*(b-mean),0)/(rates.length||1));
+
+  const kpis=[
+    ['평균 출석률', reg?pctStr(overall):'-', `전체 ${sess.length}회 · 등록 ${reg}명`],
+    ['최근 4회 출석률', reg?pctStr(recent):'-',
+      delta===null?'비교할 이전 기록 없음':`직전 4회 대비 ${delta>=0?'▲':'▼'} ${Math.abs(Math.round(delta*10)/10)}%p`, delta===null?null:delta>=0],
+    ['활동 회원', active+'명', `최근 4회 내 1회 이상 참석 (${reg?Math.round(active/reg*100):0}%)`],
+    ['핵심·정기 회원', (cnt('core')+cnt('regular'))+'명', `핵심 ${cnt('core')} · 정기 ${cnt('regular')}`],
+    ['이탈 위험', cnt('risk')+'명', '최근 3회 연속 결석', cnt('risk')===0],
+    ['출석 편차', sess.length>1?'±'+pctStr(sd):'-', peak?`최고 ${pctStr(Math.max(...rates))} · 최저 ${pctStr(Math.min(...rates))}`:''],
+    ['최고 출석 회차', peak?peak.date:'-', peak?`${peak.members}명 · ${pctStr(Math.max(...rates))}`:''],
+    ['최저 출석 회차', low?low.date:'-', low?`${low.members}명 · ${pctStr(Math.min(...rates))}`:'']
+  ];
+  const grid=document.getElementById('kpi-grid');
+  grid.innerHTML='';
+  kpis.forEach(([label,value,sub,good])=>{
+    const t=document.createElement('div'); t.className='glass rounded-xl stat-tile';
+    const a=document.createElement('div'); a.className='stat-label'; a.textContent=label;
+    const b=document.createElement('div'); b.className='stat-value'; b.style.fontSize='18px'; b.textContent=value;
+    const c=document.createElement('div'); c.className='stat-sub'; c.textContent=sub;
+    if(good===true) c.style.color='#5DCAA5'; else if(good===false) c.style.color='#E24B4A';
+    t.append(a,b,c); grid.appendChild(t);
+  });
+
+  renderRateChart(sess.slice(-20), reg, overall);
+  renderDowGrid(sess, reg);
+  renderMemberStatus(ms, chrono.length);
+}
+function renderRateChart(sess, reg, overall){
+  const el=document.getElementById('rate-chart');
+  el.innerHTML='';
+  const maxPx=120;
+  sess.forEach(s=>{
+    const rate=reg?Math.min(100,s.members/reg*100):0;
+    const col=document.createElement('div'); col.className='trend-col';
+    const wrap=document.createElement('div'); wrap.className='trend-bar-wrap';
+    wrap.title=`${s.date} · ${s.members}명 (${pctStr(rate)})`;
+    const seg=document.createElement('div'); seg.className='trend-seg off';
+    seg.style.height=Math.max(2,Math.round(rate/100*maxPx))+'px';
+    seg.style.borderRadius='3px 3px 0 0';
+    wrap.appendChild(seg);
+    const val=document.createElement('div'); val.style.cssText='font-size:9px;color:rgba(255,255,255,0.45);margin-bottom:2px';
+    val.textContent=Math.round(rate);
+    const lbl=document.createElement('div'); lbl.className='trend-col-label'; lbl.textContent=s.date;
+    col.append(val,wrap,lbl); el.appendChild(col);
+  });
+  // 전체 평균선 (막대 영역 기준: 라벨 약 38px 위)
+  if(sess.length){
+    const line=document.createElement('div');
+    line.style.cssText=`position:absolute;left:0;right:0;bottom:${38+Math.round(Math.min(100,overall)/100*maxPx)}px;border-top:1px dashed #5DCAA5;pointer-events:none;opacity:.7`;
+    el.appendChild(line);
+  }
+}
+function renderDowGrid(sess, reg){
+  const el=document.getElementById('dow-grid'); el.innerHTML='';
+  const names=['일','월','화','수','목','금','토'];
+  names.forEach((n,d)=>{
+    const g=sess.filter(s=>new Date(s.ts).getDay()===d);
+    const box=document.createElement('div'); box.className='glass rounded-xl'; box.style.cssText='padding:8px 4px;text-align:center';
+    const a=document.createElement('div'); a.style.cssText='font-size:10px;color:rgba(255,255,255,0.4)'; a.textContent=n;
+    const b=document.createElement('div'); b.style.cssText='font-size:13px;font-weight:600;color:#e8e8e6;margin:2px 0';
+    b.textContent=g.length&&reg?Math.round(avgRate(g,reg))+'%':'-';
+    const c=document.createElement('div'); c.style.cssText='font-size:9px;color:rgba(255,255,255,0.3)'; c.textContent=g.length?g.length+'회':'';
+    box.append(a,b,c); el.appendChild(box);
+  });
+}
+function setMemberStatusFilter(k){ memberStatusFilter=k; renderStats(); }
+function renderMemberStatus(ms, total){
+  const chips=document.getElementById('member-status-chips');
+  const table=document.getElementById('member-status-table');
+  chips.innerHTML=''; table.innerHTML='';
+  const mk=(key,label,n,color)=>{
+    const b=document.createElement('button'); b.className='btn-sm'+(memberStatusFilter===key?' active':'');
+    b.style.cssText='font-size:11px;padding:3px 10px';
+    b.textContent=`${label} ${n}`;
+    if(color) b.style.borderColor=color;
+    b.onclick=()=>setMemberStatusFilter(key);
+    chips.appendChild(b);
+  };
+  mk('all','전체',ms.length);
+  STATUS_ORDER.forEach(k=>{ const n=ms.filter(m=>m.status===k).length; if(n) mk(k,STATUS_META[k].label,n,STATUS_META[k].color); });
+  if(memberStatusFilter!=='all' && !ms.some(m=>m.status===memberStatusFilter)) memberStatusFilter='all';
+
+  const rows=ms.filter(m=>memberStatusFilter==='all'||m.status===memberStatusFilter)
+    .sort((a,b)=>b.rate-a.rate||b.recentRate-a.recentRate||a.name.localeCompare(b.name,'ko'));
+  document.getElementById('member-status-count').textContent=rows.length+'명';
+
+  const head=document.createElement('div'); head.className='stats-table-row';
+  head.style.cssText='position:sticky;top:0;background:#141414;color:rgba(255,255,255,0.35);font-size:11px';
+  ['회원','출석률 (참석/전체)','최근4회','연속','상태'].forEach((t,i)=>{
+    const s=document.createElement('span'); s.textContent=t;
+    if(i===1) s.style.flex='2.2'; if(i===2||i===3) s.style.flex='0.8';
+    head.appendChild(s);
+  });
+  table.appendChild(head);
+  rows.forEach(m=>{
+    const row=document.createElement('div'); row.className='stats-table-row'; row.style.alignItems='center';
+    const meta=STATUS_META[m.status];
+    const n=document.createElement('span'); n.textContent=m.name; n.style.color='rgba(255,255,255,0.7)';
+    const r=document.createElement('span'); r.style.cssText='flex:2.2;display:flex;align-items:center;gap:6px';
+    const track=document.createElement('div'); track.className='rank-bar-track';
+    const fill=document.createElement('div'); fill.className='rank-bar-fill'; fill.style.width=Math.round(m.rate)+'%'; fill.style.background=meta.color;
+    track.appendChild(fill);
+    const rt=document.createElement('span'); rt.style.cssText='flex:none;width:86px;text-align:right;font-variant-numeric:tabular-nums';
+    rt.textContent=`${Math.round(m.rate)}% (${m.attended}/${total})`;
+    r.append(track,rt);
+    const rc=document.createElement('span'); rc.style.flex='0.8'; rc.textContent=Math.round(m.recentRate)+'%';
+    const st=document.createElement('span'); st.style.flex='0.8';
+    st.textContent=m.streak>0?m.streak+'회 연속':(m.attended&&m.absent?m.absent+'회 결석':'-');
+    const bd=document.createElement('span'); bd.textContent=meta.label; bd.style.color=meta.color;
+    row.append(n,r,rc,st,bd); table.appendChild(row);
+  });
 }
 
 /* ── 평일 / 주말 참석 비교 ── */
@@ -1889,6 +2064,32 @@ document.addEventListener('DOMContentLoaded',()=>{
           <div class="stat-value" id="stat-top" style="font-size:16px">-</div>
           <div class="stat-sub" id="stat-top-sub"></div>
         </div>
+      </div>
+
+      <div class="glass rounded-xl p-5 mb-4">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3);margin-bottom:12px">출석률 분석 <span style="font-weight:400;letter-spacing:0">(출석률 = 참석 인원 ÷ 등록 회원 수)</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.75rem" id="kpi-grid"></div>
+      </div>
+
+      <div class="glass rounded-xl p-5 mb-4">
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3);margin-bottom:2px">회차별 출석률 (최근 20회)</div>
+        <div class="legend-row" style="margin-top:10px;margin-bottom:6px">
+          <div class="legend-item"><span class="legend-swatch" style="background:#7F77DD"></span>출석률</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:#5DCAA5;height:2px"></span>전체 평균</div>
+        </div>
+        <div id="rate-chart" class="trend-chart" style="position:relative;height:170px"></div>
+        <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3);margin:16px 0 8px">요일별 평균 출석률</div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px" id="dow-grid"></div>
+      </div>
+
+      <div class="glass rounded-xl p-5 mb-4">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <div style="font-size:11px;font-weight:500;letter-spacing:.06em;color:rgba(255,255,255,0.3)">회원별 출석 현황</div>
+          <span style="font-size:11px;color:rgba(255,255,255,0.3)" id="member-status-count"></span>
+        </div>
+        <div id="member-status-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:8px;line-height:1.6">핵심 80%↑ · 정기 50~79% · 간헐 20~49% · 저조 20%↓ · 신규 첫 참석이 최근 3회 이내 · 이탈위험 최근 3회 연속 결석 · 미참석 기록 없음</div>
+        <div style="overflow-x:auto"><div id="member-status-table" style="min-width:420px;max-height:460px;overflow-y:auto"></div></div>
       </div>
 
       <div class="glass rounded-xl p-5 mb-4" id="weekday-weekend-card">
